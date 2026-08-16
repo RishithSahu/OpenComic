@@ -107,7 +107,7 @@ size, disk and display.
 | Startup to `dom-ready` (packaged x64) | 5.5–8.0s | **~0.65s** |
 | CBZ archive listing (279MB, 192 pages) | 420ms | **23ms** |
 | Single page out of that CBZ | 126ms | **14ms** |
-| Library render (234 folders) | ~1,872 filesystem calls, ~82ms blocking | **0 calls, ~8ms** |
+| Library render (234 folders) | ~1,872 blocking filesystem calls, ~82ms | **468 first render, 0 on re-render**, ~8ms |
 
 What changed, in short:
 
@@ -118,7 +118,10 @@ What changed, in short:
   so a page is a plain byte range. Any failure falls back to the original 7-Zip path, so CBR/CB7/RAR are
   untouched.
 - The library page stopped rebuilding itself every few seconds during metadata scraping, and stopped
-  building its recommendation candidate list four separate times per render.
+  building its recommendation candidate list four separate times per render. Each build ran a blocking
+  `existsSync` + `statSync` per tracked folder — 234 folders × 2 calls × 4 builds — so building it once
+  removes three quarters of that outright, and the folder timestamps are then cached for two minutes,
+  which takes a re-render inside that window down to none at all.
 - PDF prefetching no longer queues 20 pages per turn while keeping only 3–4 rendered pages alive, which
   meant most of that rasterisation was evicted before it could be shown and had to be redone.
 - The rendered-page cache is budgeted in bytes rather than page count, so a zoomed page on a HiDPI display
