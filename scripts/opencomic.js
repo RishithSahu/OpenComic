@@ -233,12 +233,14 @@ if (folderPortable.check()) {
 	}
 }
 
+// Modules needed to get the first frame on screen. Everything else is loaded lazily below —
+// this whole chain runs synchronously before the document is even parsed, so every module
+// listed here is time the user spends looking at an empty window.
 const app = require(p.join(appDir, '.dist/app.js')),
 	installedFromStore = require(p.join(appDir, '.dist/installed-from-store.js')),
 	relative = require(p.join(appDir, '.dist/relative.js')),
 	storage = require(p.join(appDir, '.dist/storage.js')),
 	compatible = require(p.join(appDir, '.dist/compatible.js')),
-	image = require(p.join(appDir, '.dist/image.js')),
 	settings = require(p.join(appDir, '.dist/settings.js')),
 	cache = require(p.join(appDir, '.dist/cache.js')),
 	queue = require(p.join(appDir, '.dist/queue.js')),
@@ -249,23 +251,86 @@ const app = require(p.join(appDir, '.dist/app.js')),
 	gamepad = require(p.join(appDir, '.dist/gamepad.js')),
 	dom = require(p.join(appDir, '.dist/dom.js')),
 	events = require(p.join(appDir, '.dist/events.js')),
-	ebook = require(p.join(appDir, '.dist/ebook.js')),
-	workers = require(p.join(appDir, '.dist/workers.js')),
-	childFork = require(p.join(appDir, '.dist/child-fork.js')),
 	threads = require(p.join(appDir, '.dist/threads.js')),
 	mutex = require(p.join(appDir, '.dist/mutex.js')),
 	fileManager = require(p.join(appDir, '.dist/file-manager.js')),
-	serverClient = require(p.join(appDir, '.dist/server-client.js')),
-	opds = require(p.join(appDir, '.dist/opds.js')),
-	reading = require(p.join(appDir, '.dist/reading.js')),
 	recentlyOpened = require(p.join(appDir, '.dist/recently-opened.js')),
 	theme = require(p.join(appDir, '.dist/theme.js')),
-	dragAndDrop = require(p.join(appDir, '.dist/drag-and-drop.js')),
-	checkReleases = require(p.join(appDir, '.dist/check-releases.js')),
-	shortcuts = require(p.join(appDir, '.dist/shortcuts.js')),
-	tracking = require(p.join(appDir, '.dist/tracking.js')),
-	trackingSites = require(p.join(appDir, '.dist/tracking/tracking-sites.js')),
-	tutorial = require(p.join(appDir, '.dist/tutorial.js'));
+	shortcuts = require(p.join(appDir, '.dist/shortcuts.js'));
+
+// Lazily loaded modules.
+//
+// These are reached as bare globals from every other module (`reading.x`, `opds.y`, ...), and a
+// top-level `const` here would be a global *lexical* binding that shadows any property defined
+// on `window`. So they must not be declared above: the getter has to be the only binding, and
+// free-variable lookups then resolve to it through the scope chain exactly as before.
+//
+// Each one pulls a large native or third-party dependency that is not needed to paint the
+// library — sharp, epubjs/foliate-js, the AI runtime, and the whole remote-server stack
+// (@aws-sdk/client-s3, ssh2, smb2, webdav, basic-ftp).
+const lazyModules = {
+	image: '.dist/image.js',
+	ebook: '.dist/ebook.js',
+	workers: '.dist/workers.js',
+	childFork: '.dist/child-fork.js',
+	serverClient: '.dist/server-client.js',
+	opds: '.dist/opds.js',
+	reading: '.dist/reading.js',
+	dragAndDrop: '.dist/drag-and-drop.js',
+	checkReleases: '.dist/check-releases.js',
+	tracking: '.dist/tracking.js',
+	trackingSites: '.dist/tracking/tracking-sites.js',
+	tutorial: '.dist/tutorial.js',
+};
+
+for (const name in lazyModules) {
+	((name, modulePath) => {
+
+		let loaded = false;
+
+		Object.defineProperty(window, name, {
+			configurable: true,
+			enumerable: true,
+			get: function () {
+
+				if (loaded === false)
+					loaded = require(p.join(appDir, modulePath));
+
+				return loaded;
+			},
+		});
+
+	})(name, lazyModules[name]);
+}
+
+// Load the deferred modules in the background once the UI is up, so the first action that needs
+// one does not pay for it. Ordered cheapest-to-costliest; drag and drop first because it only
+// registers document listeners and is useless until it has.
+function warmLazyModules() {
+	const order = ['dragAndDrop', 'image', 'tracking', 'trackingSites', 'reading', 'workers', 'childFork', 'ebook', 'opds', 'serverClient'];
+	let i = 0;
+
+	const next = function () {
+
+		if (i >= order.length) return;
+
+		try {
+			void window[order[i]];
+		}
+		catch (error) {
+			console.error('Failed to preload module ' + order[i] + ':', error);
+		}
+
+		i++;
+
+		if (typeof requestIdleCallback === 'function')
+			requestIdleCallback(next, { timeout: 3000 });
+		else
+			setTimeout(next, 50);
+	};
+
+	next();
+}
 
 var tempFolder = settings.getTmpFolder();
 var macosMAS = false;
@@ -395,6 +460,8 @@ async function startApp() {
 	template.loadGlobalElement('index.elements.menus.html', 'menus');
 	dom.loadIndexContentLeft(false);
 	startupMark('first-paint-ready');
+
+	warmLazyModules();
 
 	// Launch first-time tutorial after the initial UI is ready. Never steal the screen when the
 	// app was launched to open a specific file or is restoring a reading session, and never let
@@ -949,7 +1016,9 @@ function generateAppMenu(force = false) {
 			{
 				label: language.menu.help.main,
 				submenu: [
-					{ label: language.menu.help.bug, click: function () { electron.shell.openExternal('https://github.com/ollm/OpenComic/issues'); } },
+					// This fork's tracker, not upstream's: a bug in this build is not upstream's to
+					// receive, and most of what is reported here will be in code they do not have.
+					{ label: language.menu.help.bug, click: function () { electron.shell.openExternal('https://github.com/RishithSahu/OpenComic/issues'); } },
 					{ label: language.menu.help.guides, click: function () { showGuidesWindow(); } },
 					{ type: 'separator' },
 					{ label: language.menu.help.funding, click: function () { electron.shell.openExternal('https://opencomic.app/docs/donate'); }, visible: !macosMAS },

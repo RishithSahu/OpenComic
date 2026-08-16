@@ -3890,6 +3890,38 @@ function getReadingPagesConfigPath(fallbackPath = false) {
 
 const trackedSeriesModeKeys = ['readingView', 'readingManga', 'readingWebtoon', 'readingDoublePage'];
 
+// Earlier builds of the automatic reading-mode feature stored a copy of the entire reading
+// config per series. Because loadReadingConfig() spreads the stored object over the global
+// config, that snapshot pinned every unrelated setting (AI tools, filters, margins, ...) to
+// whatever it was when the mode was first applied — so changing them in Settings had no effect
+// on those series. Reduce any such entry to just the mode keys before it is merged.
+function migrateTrackedSeriesConfig(readingPagesConfigPath = '', storedReadingPagesConfig = false) {
+	if (!storedReadingPagesConfig || !storedReadingPagesConfig.trackedSeriesType)
+		return storedReadingPagesConfig;
+
+	const allowed = ['configKey', 'trackedSeriesType'].concat(trackedSeriesModeKeys);
+	const keys = Object.keys(storedReadingPagesConfig);
+
+	if (keys.every(function (key) { return allowed.includes(key); }))
+		return storedReadingPagesConfig;
+
+	const reduced = {};
+
+	for (let i = 0, len = allowed.length; i < len; i++) {
+		const key = allowed[i];
+
+		if (typeof storedReadingPagesConfig[key] !== 'undefined')
+			reduced[key] = storedReadingPagesConfig[key];
+	}
+
+	reduced.configKey = false;
+
+	if (readingPagesConfigPath)
+		storage.updateVar('readingPagesConfig', readingPagesConfigPath, reduced);
+
+	return reduced;
+}
+
 function hasCustomTrackedSeriesMode(storedReadingPagesConfig = false) {
 	if (!storedReadingPagesConfig || typeof storedReadingPagesConfig !== 'object')
 		return false;
@@ -3968,13 +4000,20 @@ function applyTrackedSeriesReadingDefaults(readingPagesConfigPath = '', storedRe
 	if (!seriesType)
 		return false;
 
-	const readingPagesConfig = copy(_config);
-	delete readingPagesConfig.key;
-
-	readingPagesConfig.configKey = false;
+	// Store ONLY the mode keys, never a copy of the whole reading config. loadReadingConfig()
+	// spreads the stored object over the global config, so a minimal object leaves every other
+	// setting (AI, filters, margins, ...) following the global one. Snapshotting the full
+	// config here — as this used to — froze every setting for the series at the moment the
+	// defaults were applied, so later changes in Settings silently never reached it. Enabling
+	// an AI tool globally, for instance, had no effect on any auto-configured series.
+	const readingPagesConfig = {
+		configKey: false,
+		// Marks the config as auto-applied rather than user-chosen (see hasCustomTrackedSeriesMode).
+		trackedSeriesType: seriesType,
+	};
 
 	if (seriesType === 'manga') {
-		if (readingPagesConfig.readingView === 'scroll')
+		if (_config.readingView === 'scroll')
 			readingPagesConfig.readingView = 'slide';
 
 		readingPagesConfig.readingManga = true;
@@ -3991,15 +4030,12 @@ function applyTrackedSeriesReadingDefaults(readingPagesConfigPath = '', storedRe
 		return false;
 	}
 
-	// Marks the config as auto-applied rather than user-chosen (see hasCustomTrackedSeriesMode).
-	readingPagesConfig.trackedSeriesType = seriesType;
-
 	// Nothing to do if the active config already matches; re-writing storage and reloading the
 	// reader on every open would be pure churn.
 	const alreadyApplied = storedReadingPagesConfig
 		&& storedReadingPagesConfig.trackedSeriesType === seriesType
 		&& trackedSeriesModeKeys.every(function (key) {
-			return _config[key] === readingPagesConfig[key];
+			return typeof readingPagesConfig[key] === 'undefined' || _config[key] === readingPagesConfig[key];
 		});
 
 	if (alreadyApplied)
@@ -4008,7 +4044,7 @@ function applyTrackedSeriesReadingDefaults(readingPagesConfigPath = '', storedRe
 	storage.updateVar('readingPagesConfig', readingPagesConfigPath, readingPagesConfig);
 
 	currentReadingConfigKey = false;
-	_config = { ...readingPagesConfig, key: false };
+	_config = { ..._config, ...readingPagesConfig, key: false };
 
 	return true;
 }
@@ -4389,6 +4425,10 @@ function loadReadingConfig(key = false) {
 			storage.updateVar('readingPagesConfig', readingPagesConfigPath, storedReadingPagesConfig);
 		}
 	}
+
+	// Must run before the merge below, not after: once a full snapshot has been spread over
+	// _config the stale values are indistinguishable from real ones.
+	storedReadingPagesConfig = migrateTrackedSeriesConfig(readingPagesConfigPath, storedReadingPagesConfig);
 
 	if (key === false) {
 		var readingPagesConfig = storedReadingPagesConfig;

@@ -1,10 +1,17 @@
 const sanitizeHtml = require('sanitize-html'),
 	marked = require('marked');
 
+// This fork's own releases. Checking upstream here would be actively harmful: this fork's
+// version is ahead of upstream's, so upstream releases would either never register as newer or,
+// once they overtake, would send users to a download that has none of the fork's features and
+// would overwrite this build.
+const RELEASES_REPO = 'RishithSahu/OpenComic';
+const RELEASES_URL = 'https://github.com/'+RELEASES_REPO+'/releases';
+
 function showReleaseDialog(release)
 {
-	release.releases_url = 'https://opencomic.app/docs/installation/download';
-	release.html_url = 'https://github.com/ollm/OpenComic/releases';
+	release.releases_url = RELEASES_URL;
+	release.html_url = RELEASES_URL;
 
 	const parsed = marked.parse(release.body).replace(/(\<a\s)\s*/ig, '$1 target="_blank"').replace(/\<h5\>/ig, '<h5 class="title-small">');
 
@@ -73,7 +80,7 @@ function check(force = false)
 
 	console.log('Checking for new release');
 
-	fetch('https://api.github.com/repos/ollm/OpenComic/releases', options).then(async function(response){
+	fetch('https://api.github.com/repos/'+RELEASES_REPO+'/releases', options).then(async function(response){
 
 		let json = await response.json();
 		if(json.message) return console.log(json.message);

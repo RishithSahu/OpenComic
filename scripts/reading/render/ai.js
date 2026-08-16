@@ -126,6 +126,16 @@ const downloading = {
 	},
 };
 
+// Whether image() would actually build a pipeline for this page. Callers use it to avoid
+// paying for work (such as materialising a PDF page on disk) when no AI step is enabled.
+function willProcess(imageSize)
+{
+	if(_config?.readingAi?.artifactRemoval?.active || _config?.readingAi?.descreen?.active)
+		return true;
+
+	return !!reading.ai.toUpscale(imageSize);
+}
+
 function image(src, imageSize, options = {})
 {
 	setModelsPath();
@@ -293,5 +303,6 @@ module.exports = {
 	upscale,
 	pipeline,
 	image,
+	willProcess,
 	clean,
 };

@@ -7,20 +7,20 @@
 </h1>
 
 <h3 align="center">
-	Comic and Manga reader
+	A manga-first comic reader
 </h3>
 
 <div align="center">
 
-[Guides](https://opencomic.app/docs/category/guides) | [Screenshots](/SCREENSHOTS.MD) | [Features](#features) | [Changelog](/CHANGELOG.md) | [Download](#download)
+[Why this fork](#why-this-fork) | [What's new](#whats-new) | [Screenshots](/SCREENSHOTS.MD) | [Features](#features) | [Changelog](/CHANGELOG.md) | [Download](#download)
 
 </div>
 
-> **This is a modified fork** of [ollm/OpenComic](https://github.com/ollm/OpenComic), maintained at
-> [RishithSahu/ModifiedOpenComic](https://github.com/RishithSahu/ModifiedOpenComic). It adds an AniList-backed
-> library — series metadata, automatic per-series reading modes, recommendations and a guided tutorial —
-> on top of upstream OpenComic. See [Fork additions](#fork-additions) for what differs, and the
-> [Changelog](/CHANGELOG.md) for the full history.
+> **This is a modified fork** of [ollm/OpenComic](https://github.com/ollm/OpenComic) by Oleguer Llopart,
+> maintained at [RishithSahu/OpenComic](https://github.com/RishithSahu/OpenComic).
+> All of upstream's reader is here; this fork adds a manga-aware library on top of it and puts a lot of
+> work into making the app start and turn pages faster. Upstream is excellent — if you want plain
+> OpenComic, get it from [there](https://github.com/ollm/OpenComic).
 
 ## Screenshot
 
@@ -28,7 +28,108 @@
 
 More [Screenshots 📸](/SCREENSHOTS.MD)
 
+<a id="why-this-fork"></a>
+
+## Why this fork
+
+Upstream OpenComic is a great general-purpose comic reader. This fork is aimed at people with a large,
+messy manga/manhwa library who want it to organise and read itself sensibly:
+
+- **It knows what you are reading.** Series metadata is scraped from AniList per folder, so your library
+  shows real titles, authors, genres and ratings instead of directory names.
+- **It picks the right reading mode for you.** A series AniList reports as `manga` opens in double page,
+  right-to-left. `manhwa` and `manhua` open in webtoon/scroll. Set a mode by hand and that choice wins and
+  is remembered — per series, not globally.
+- **It helps you decide what to read next.** Continue reading, Recommended for you and Recently added rows
+  on the home screen, with thumbs up/down feedback that actually changes what you get shown.
+- **It finds things.** `genre:action series:manhwa rating>75 -completed` works, and searches can be saved.
+- **It got a lot faster.** See [Performance](#performance) — the numbers are measured, not estimated.
+
+<a id="whats-new"></a>
+
+## What's new since v1.7.0
+
+Roughly 160 fork changes across `v1.7.0` → `v1.8.1`. The highlights:
+
+##### 📇 Manga-aware library
+
+- Automatic AniList metadata per series folder: title, author, genres, demographic, serialization year,
+  rating and description, with backfill for entries scraped before newer fields existed
+- **Automatic reading mode per series**, driven by the AniList format — and per-series reading
+  configuration, so each title keeps its own layout instead of sharing one global setting
+- Genre filter menu in Library and Recently opened
+- Rename titles from the right-click menu (display name only — files on disk are never touched)
+
+##### ▶️ Discovery
+
+- **Continue reading**, **Recommended for you** and **Recently added** rows with cover art and metadata
+- Thumbs up/down recommendation feedback with anti-repeat rotation and fairness weighting, plus an
+  optional ranking sidebar combining the AniList score with your own likes and dislikes
+
+##### 🔎 Search
+
+- Power search syntax with field filters, comparisons and negation (full grammar [below](#search-syntax))
+- Saved searches, recallable in one click
+- Debounced search, so typing no longer freezes on a large library
+
+##### ⚡ Performance
+
+See [Performance](#performance) for the measurements.
+
+##### 🛟 Reliability
+
+- **"Clear temporary files" no longer wipes your library**, tracking, reading progress and bookmarks —
+  it also asks for confirmation first, which it previously did not
+- Fixed opened files showing only their first page until their cache was cleared by hand
+- Fixed EPUB pagination getting permanently stuck on the loading screen
+- Fixed looping and jumping back to the top during continuous scroll reading
+- Fixed corrupted thumbnails being retried forever, pinning a CPU core
+- Fixed the library search hanging indefinitely on an unreadable folder
+- Every AI tool (Artifact Removal, Descreen, Upscale) now works on PDFs, at the right resolution, without
+  leaking blob memory or flickering on every page turn
+
+##### 🎓 Quality of life
+
+- Interactive in-app tutorial that walks through the real UI using the bundled Pepper & Carrot sample
+- Guides available offline from **Help ▸ Guides**
+- Right-click to delete custom catalog tabs
+- Windows installers no longer fail to start with `Could not load the "sharp" module`
+
+<a id="performance"></a>
+
+## Performance
+
+Measured on the same machine, warm, against a packaged build — your numbers will differ with library
+size, disk and display.
+
+| Area | Before | After |
+| --- | --- | --- |
+| Startup to `dom-ready` (packaged x64) | 5.5–8.0s | **~0.65s** |
+| CBZ archive listing (279MB, 192 pages) | 420ms | **23ms** |
+| Single page out of that CBZ | 126ms | **14ms** |
+| Library render (234 folders) | ~1,872 filesystem calls, ~82ms blocking | **0 calls, ~8ms** |
+
+What changed, in short:
+
+- The renderer used to `require` its entire module graph — sharp, the AI runtime, epubjs, the whole
+  remote-server stack — before the document was even parsed. Only what is needed to paint the library
+  loads up front now; the rest is pulled in lazily and warmed during idle time.
+- CBZ archives are read in-process instead of spawning a `7z` subprocess per operation. A CBZ is a ZIP,
+  so a page is a plain byte range. Any failure falls back to the original 7-Zip path, so CBR/CB7/RAR are
+  untouched.
+- The library page stopped rebuilding itself every few seconds during metadata scraping, and stopped
+  building its recommendation candidate list four separate times per render.
+- PDF prefetching no longer queues 20 pages per turn while keeping only 3–4 rendered pages alive, which
+  meant most of that rasterisation was evicted before it could be shown and had to be redone.
+- The rendered-page cache is budgeted in bytes rather than page count, so a zoomed page on a HiDPI display
+  can no longer quietly hold hundreds of megabytes.
+
+Not everything tried made the cut — a page scheduler and a direct archive-to-Sharp streaming path were
+built, measured, found to be within noise, and removed rather than shipped on principle.
+
 ## Features
+
+Everything below comes from upstream OpenComic and works exactly as it does there.
 
 - 🌄 Support these image formats: `JPG`, `JP2`, `JXR`, `JXL`, `PNG`, `APNG`, `AVIF`, `HEIC`, `WEBP`, `GIF`, `SVG`, `BMP`, `ICO`
 - 📦 Support these compressed formats: `RAR`, `ZIP`, `7Z`, `TAR`, `LZH`, `ACE`, `CBR`, `CBZ`, `CBA`, `CB7`, `CBT`
@@ -55,35 +156,18 @@ More [Screenshots 📸](/SCREENSHOTS.MD)
 - ⌨️ Custom shortcuts and tap zones
 - 🔢 Multiple interpolation methods: `lanczos3`, `lanczos2`, `mitchell`, `cubic`, `linear`, `nearest` and others
 
-<a id="fork-additions"></a>
+<a id="search-syntax"></a>
 
-## Fork additions
+## Search syntax
 
-Everything above comes from upstream OpenComic. This fork adds:
+The search overlay accepts field filters, for example `genre:action series:manhwa rating>75 -completed`:
 
-##### AniList-backed library
+- **Text fields** — `author:` (`artist:`, `creator:`), `genre:`, `tag:`, `label:`, `title:`, `name:`, `path:`, `status:`, `type:` (`kind:`), `source:`, `series:` (`seriestype:`), `demographic:` (`demo:`), `has:`
+- **Numeric fields**, usable with `:` `=` `>` `<` `>=` `<=` — `rating:` (`score:`), `year:`, `progress:`, `confidence:`, `time:` (`readtime:`, `minutes:`)
+- **Keywords** — `unread`, `reading`, `read`/`completed`, `favorite`, `tracked`/`untracked`, `folder`, `file`, `compressed`
+- Combine values with `,` or `|`, quote phrases, and negate any term with `-` or `!`
 
-- 📇 Automatic series metadata per folder: title, author, genres, demographic, serialization year, rating and description, scraped from AniList
-- 🧭 **Automatic reading mode per series** — a series detected as `manga` opens in double page with right-to-left (inverted) reading, while `manhwa` and `manhua` open in webtoon/scroll mode. A mode you set by hand always wins and is remembered for that series
-- 💾 Per-series reading configuration, so each title keeps its own layout instead of sharing one global setting
-- 🏷️ Genre filter menu in Library and Recents, driven by the tracked metadata
-
-##### Home sections
-
-- ▶️ **Continue reading**, **Recommended for you** and **Recently added** rows on the library home, with cover art and series metadata
-- 👍👎 Recommendation feedback that tunes future suggestions, with an optional internal ranking sidebar combining the AniList rating with your own likes and dislikes
-
-##### Quality of life
-
-- 🎓 Interactive in-app tutorial that walks through the real UI using the bundled Pepper & Carrot sample
-- ✏️ Rename titles from the right-click menu (changes the display name only; files on disk are untouched)
-- 💾 Saved searches, recallable in one click from the search overlay
-- 🔎 Power search syntax, for example `genre:action series:manhwa rating>75 -completed`:
-  - **Text fields** — `author:` (`artist:`, `creator:`), `genre:`, `tag:`, `label:`, `title:`, `name:`, `path:`, `status:`, `type:` (`kind:`), `source:`, `series:` (`seriestype:`), `demographic:` (`demo:`), `has:`
-  - **Numeric fields**, usable with `:` `=` `>` `<` `>=` `<=` — `rating:` (`score:`), `year:`, `progress:`, `confidence:`, `time:` (`readtime:`, `minutes:`)
-  - **Keywords** — `unread`, `reading`, `read`/`completed`, `favorite`, `tracked`/`untracked`, `folder`, `file`, `compressed`
-  - Combine values with `,` or `|`, quote phrases, and negate any term with `-` or `!`
-- 🖥️ Guides available offline from **Help ▸ Guides**
+Any search can be saved from the overlay and recalled in one click.
 
 You can see the changes between versions in the [Changelog 📝](/CHANGELOG.md)
 
@@ -91,64 +175,18 @@ You can see the changes between versions in the [Changelog 📝](/CHANGELOG.md)
 
 ## Download
 
-This fork (currently `v1.8.1`) has no prebuilt downloads — see [Build from source](#build-from-source)
-to produce an installer, or grab a release from
-[RishithSahu/ModifiedOpenComic](https://github.com/RishithSahu/ModifiedOpenComic/releases) if one is published.
+### This fork
+
+**[Windows x64 installer — `v1.8.1`](https://github.com/RishithSahu/OpenComic/releases/latest)**
+
+The build is unsigned, so Windows SmartScreen will warn the first time you run it — choose
+**More info ▸ Run anyway**. For macOS and Linux, [build from source](#build-from-source).
+
+### Upstream
 
 The links below are **upstream OpenComic [`v1.7.7`](https://github.com/ollm/OpenComic/releases/tag/v1.7.7)**
-and do *not* include any of the [fork additions](#fork-additions).
+and do *not* include anything described in [What's new](#whats-new).
 
-###### Stores
-
-<a href="https://apps.microsoft.com/detail/9PDCMVNFZ2KK"><img height="50" alt="Get it from Microsoft" title="Get it from Microsoft" src="https://raw.githubusercontent.com/ollm/OpenComic/master/images/store/microsoft-store.svg" /></a>
-&nbsp;&nbsp;&nbsp;<a href="https://apps.apple.com/app/opencomic/id6464329463"><img height="50" alt="Download on the Mac App Store" title="Download on the Mac App Store" src="https://raw.githubusercontent.com/ollm/OpenComic/master/images/store/mac-app-store.svg" /></a>
-&nbsp;&nbsp;&nbsp;<a href="https://snapcraft.io/opencomic"><img height="50" alt="Get it from the Snap Store" title="Get it from the Snap Store" src="https://raw.githubusercontent.com/ollm/OpenComic/master/images/store/snap-store.svg" /></a>
-&nbsp;&nbsp;&nbsp;<a href="https://flathub.org/apps/app.opencomic.OpenComic"><img height="50" alt="Get it on Flathub" title="Get it on Flathub" src="https://raw.githubusercontent.com/ollm/OpenComic/master/images/store/flathub-store.svg" /></a>
-
-###### Windows
-
-- [.exe](https://github.com/ollm/OpenComic/releases/download/v1.7.7/OpenComic.Setup.1.7.7.exe)
-- [portable.exe](https://github.com/ollm/OpenComic/releases/download/v1.7.7/OpenComic.Portable.1.7.7.exe)
-- [folder.portable.exe](https://github.com/ollm/OpenComic/releases/download/v1.7.7/OpenComic.Folder.Portable.1.7.7.exe)
-- [folder.portable.7z](https://github.com/ollm/OpenComic/releases/download/v1.7.7/OpenComic-Folder-Portable-1.7.7.7z)
-
-###### Windows Arm64
-
-- [arm64.exe](https://github.com/ollm/OpenComic/releases/download/v1.7.7/OpenComic.Setup.1.7.7.arm64.exe)
-
-###### macOS
-
-- [.dmg](https://github.com/ollm/OpenComic/releases/download/v1.7.7/OpenComic-1.7.7.dmg)
-- [.pkg](https://github.com/ollm/OpenComic/releases/download/v1.7.7/OpenComic-1.7.7.pkg)
-- [.7z](https://github.com/ollm/OpenComic/releases/download/v1.7.7/OpenComic-1.7.7-mac.7z)
-
-###### macOS Arm64
-
-- [arm64.dmg](https://github.com/ollm/OpenComic/releases/download/v1.7.7/OpenComic-1.7.7-arm64.dmg)
-- [arm64.pkg](https://github.com/ollm/OpenComic/releases/download/v1.7.7/OpenComic-1.7.7-arm64.pkg)
-- [arm64.7z](https://github.com/ollm/OpenComic/releases/download/v1.7.7/OpenComic-1.7.7-arm64-mac.7z)
-
-###### Linux
-
-- [.deb](https://github.com/ollm/OpenComic/releases/download/v1.7.7/opencomic_1.7.7_amd64.deb)
-- [.rpm](https://github.com/ollm/OpenComic/releases/download/v1.7.7/opencomic-1.7.7.x86_64.rpm)
-- [.7z](https://github.com/ollm/OpenComic/releases/download/v1.7.7/opencomic-1.7.7.7z)
-- [.tar.gz](https://github.com/ollm/OpenComic/releases/download/v1.7.7/opencomic-1.7.7.tar.gz)
-- [.snap](https://github.com/ollm/OpenComic/releases/download/v1.7.7/opencomic_1.7.7_amd64.snap)
-- [.flatpak](https://github.com/ollm/OpenComic/releases/download/v1.7.7/OpenComic-1.7.7-x86_64.flatpak)
-- [.AppImage](https://github.com/ollm/OpenComic/releases/download/v1.7.7/OpenComic-1.7.7.AppImage)
-- [AUR](https://aur.archlinux.org/packages/opencomic-bin/) by [@z00rat](https://github.com/z00rat)
-- [folder.portable.7z](https://github.com/ollm/OpenComic/releases/download/v1.7.7/opencomic-folder-portable-linux-1.7.7.7z)
-
-###### Linux Arm64
-
-- [arm64.deb](https://github.com/ollm/OpenComic/releases/download/v1.7.7/opencomic_1.7.7_arm64.deb)
-- [arm64.rpm](https://github.com/ollm/OpenComic/releases/download/v1.7.7/opencomic-1.7.7.aarch64.rpm)
-- [arm64.7z](https://github.com/ollm/OpenComic/releases/download/v1.7.7/opencomic-1.7.7-arm64.7z)
-- [arm64.tar.gz](https://github.com/ollm/OpenComic/releases/download/v1.7.7/opencomic-1.7.7-arm64.tar.gz)
-- [arm64.flatpak](https://github.com/ollm/OpenComic/releases/download/v1.7.7/OpenComic-1.7.7-aarch64.flatpak)
-- [arm64.AppImage](https://github.com/ollm/OpenComic/releases/download/v1.7.7/OpenComic-1.7.7-arm64.AppImage)
-- [arm64.folder.portable.7z](https://github.com/ollm/OpenComic/releases/download/v1.7.7/opencomic-folder-portable-linux-1.7.7-arm64.7z)
 
 ## Website
 
@@ -160,8 +198,8 @@ and do *not* include any of the [fork additions](#fork-additions).
 **Requirements**: Git, Node and NPM
 
 ```shell
-git clone https://github.com/RishithSahu/ModifiedOpenComic.git
-cd ModifiedOpenComic
+git clone https://github.com/RishithSahu/OpenComic.git
+cd OpenComic
 npm install
 npm start
 ```

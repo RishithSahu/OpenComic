@@ -251,7 +251,12 @@ async function ensureDirectImageSource(src, img)
 	if(!img)
 		return false;
 
-	if(!img.getAttribute('src') || img.dataset.baseSrc !== src || img.classList.contains('blobRendered'))
+	// Note the absence of a `blobRendered` check. Re-pointing an element that is already
+	// showing a rendered blob of this same page back at the raw file downgrades it for a frame
+	// before the blob is reapplied — which is exactly the flicker seen on every page turn, and
+	// primeImageSource() runs this over the whole visible window on each focus change.
+	// dataset.baseSrc is now set on the blob paths too, so it alone identifies what is shown.
+	if(!img.getAttribute('src') || img.dataset.baseSrc !== src)
 		await srcToImage(src, img);
 
 	return true;
@@ -590,6 +595,35 @@ function renderedBlobLimit()
 	return 24;
 }
 
+// A page count is the wrong unit to budget this cache in.
+//
+// Rendered pages are PNG at compressionLevel 0, which is essentially raw — a 1280px page
+// measures 6.6MB. The rendered width is originalWidth * scale * devicePixelRatio capped by
+// config.renderMaxWidth, whose default is 12000, so the same "one page" is 6.6MB at a normal
+// window size, ~26MB on a HiDPI display, and far more again when zoomed in. Keeping "48 pages"
+// therefore meant anywhere from 320MB to several gigabytes depending on the display, the window
+// and the zoom level, with nothing in the reader aware of the difference.
+//
+// The budget below is deliberately set above what the count limits allow at normal page sizes,
+// so it changes nothing in the common case and only binds when pages are genuinely large —
+// which is precisely the case the count could not see.
+function renderedBlobByteBudget()
+{
+	return (reading.readingViewIs('scroll') ? 384 : 256) * 1024 * 1024;
+}
+
+function renderedBlobBytes()
+{
+	let bytes = 0;
+
+	for(let i = 0, len = renderedObjectsURL.length; i < len; i++)
+	{
+		bytes += renderedObjectsURL[i]?.data?.size || 0;
+	}
+
+	return bytes;
+}
+
 function scheduleRenderedPdfDimensionsSync()
 {
 	clearTimeout(syncRenderedPdfDimensionsST);
@@ -637,16 +671,20 @@ function syncRenderedPdfDimensions(index, imageData, data = false)
 function pruneRenderedObjectURL()
 {
 	const limit = renderedBlobLimit();
-	if(renderedObjectsURL.length <= limit) return;
+	const byteBudget = renderedBlobByteBudget();
+
+	let count = renderedObjectsURL.length;
+	let bytes = renderedBlobBytes();
+
+	if(count <= limit && bytes <= byteBudget) return;
 
 	// Oldest first (renderedObjectsURL is already append-ordered), skipping anything still
 	// inside the grace period, so nothing that is on screen can be pulled out from under it.
 	const now = Date.now();
-	const toEvict = renderedObjectsURL
-		.filter(o => !o.pinned && o.createdAt && (now - o.createdAt) > RENDERED_BLOB_MIN_AGE_MS)
-		.slice(0, renderedObjectsURL.length - limit);
+	const candidates = renderedObjectsURL
+		.filter(o => !o.pinned && o.createdAt && (now - o.createdAt) > RENDERED_BLOB_MIN_AGE_MS);
 
-	if(!toEvict.length) return;
+	if(!candidates.length) return;
 
 	// Collect the blobs currently attached to an <img> once instead of re-walking every
 	// <img> in the document for each eviction candidate.
@@ -661,10 +699,21 @@ function pruneRenderedObjectURL()
 			inUse.add(src);
 	}
 
-	for(let i = 0; i < toEvict.length; i++)
+	// Keep going until both budgets are satisfied rather than evicting a fixed number: one
+	// oversized page can put the cache over its byte budget on its own, and a fixed slice
+	// sized from the count would never reclaim it.
+	for(let i = 0; i < candidates.length && (count > limit || bytes > byteBudget); i++)
 	{
-		if(!inUse.has(toEvict[i]?.data?.blob))
-			revokeObjectURL(toEvict[i].key, true);
+		const entry = candidates[i];
+
+		if(inUse.has(entry?.data?.blob))
+			continue;
+
+		if(revokeObjectURL(entry.key, true))
+		{
+			count--;
+			bytes -= entry?.data?.size || 0;
+		}
 	}
 }
 
@@ -879,7 +928,51 @@ async function render(index, _scale = false, magnifyingGlass = false, queueIndex
 			if(compatible.image.convert(path)) // Convert unsupported images
 				src = await workers.convertImage(path, {priorize: true});
 
-			const aiInputSrc = src;
+			// The AI pipeline reads its input from a file path, but PDF pages are rasterised
+			// straight to blobs by renderBlobPdf() and are never written to disk — openComic()
+			// only makes the PDF itself available, not its pages. Without this the pipeline
+			// always failed with "Input file is missing: .../page-XXXX.jpg", so no AI feature
+			// ever ran on a PDF. Extract just this page, and only when AI is actually enabled.
+			if(runAi && renderCanvas && file && imageData.name && ai.willProcess(imageData))
+			{
+				// imagesData carries the name without the extension ("page-0001"), while the
+				// extraction "only" filter and the file status map are both keyed by the real
+				// filename ("page-0001.jpg"). Without this the filter matched nothing, so no
+				// page was ever extracted and the AI kept reading a stale low-resolution file.
+				// renderBlob below normalises the same way.
+				const aiPageName = /\.jpg$/.test(imageData.name) ? imageData.name : imageData.name + '.jpg';
+
+				// Extract at the resolution the page will actually be shown at. fileCompressed's
+				// default config.width is only devicePixelRatio * 300 (it exists for vector
+				// thumbnails), and extractPdf() rasterises at exactly config.width — so relying
+				// on the default fed the AI a ~300px wide page whose output then had to be blown
+				// up to full size, which is what made descreened pages look blurry.
+				const aiExtractWidth = Math.max(1, Math.min(
+					_config.width,
+					config.renderMaxWidth,
+					file?.pdfFastRead ? 2800 : 3200
+				));
+
+				const extracted = file.getFileStatus ? file.getFileStatus(aiPageName) : false;
+
+				if(!fs.existsSync(src) || !extracted?.extracted || extracted?.width !== aiExtractWidth)
+				{
+					try
+					{
+						// force: extract() otherwise short-circuits on checkIfAlreadyExtracted()
+						// whenever a file is already on disk, and the one sitting there is the
+						// low-resolution copy left by thumbnail generation — which is exactly
+						// the stale input we are trying to replace. The guard above already
+						// limits this to pages that genuinely need re-rendering.
+						await file.extract({only: [aiPageName], width: aiExtractWidth, force: true});
+						fileManager.setTmpUsage(src);
+					}
+					catch(error)
+					{
+						console.error('Failed to extract page for the AI pipeline: '+src, error);
+					}
+				}
+			}
 
 			const aiPath = ai.image(src, imageData, {
 				run: runAi,
@@ -943,6 +1036,7 @@ async function render(index, _scale = false, magnifyingGlass = false, queueIndex
 					const data = renderedObjectsURLCache[key];
 					syncRenderedPdfDimensions(index, imageData, data);
 					img.src = data.blob;
+					img.dataset.baseSrc = src;
 					img.classList.add('blobRendered', 'blobRender', 'sizeFromImg');
 					img.style.imageRendering = '';
 
@@ -967,7 +1061,13 @@ async function render(index, _scale = false, magnifyingGlass = false, queueIndex
 										img.style.imageRendering = cssMethods[_config.kernel];
 									}
 									else {
-										await ensureDirectImageSource(src, img);
+										// Deliberately no ensureDirectImageSource() here. It pointed the element at
+										// the raw AI output, which is then overwritten by the correctly sized blob a
+										// few milliseconds later — one unscaled intermediate frame, visible as a
+										// flicker on every page turn. The reader already waits for the render to
+										// finish before showing the page (see setOnRender), so there is nothing to
+										// gain from displaying the unscaled file first, and the catch below still
+										// falls back to it if the resize fails.
 										let aiResizeConfig = {..._config};
 										if(!aiResizeConfig.kernel || aiResizeConfig.kernel === 'chromium')
 											aiResizeConfig.kernel = 'lanczos3';
@@ -991,6 +1091,7 @@ async function render(index, _scale = false, magnifyingGlass = false, queueIndex
 												if(queueIndex !== queue.index('readingRender')) return; // Return if the queue is different
 
 												img.src = aiData.blob;
+												img.dataset.baseSrc = src;
 												img.classList.add('blobRendered', 'blobRender');
 												img.style.imageRendering = '';
 												renderQuality = 'processed';
@@ -1020,6 +1121,7 @@ async function render(index, _scale = false, magnifyingGlass = false, queueIndex
 									if (queueIndex !== queue.index('readingRender')) return; // Return if the queue is different
 
 img.src = data.blob;
+img.dataset.baseSrc = src;
 								img.classList.add('blobRendered', 'blobRender', 'sizeFromImg');
 								img.style.imageRendering = '';
 
@@ -1057,6 +1159,7 @@ img.src = data.blob;
 				else if(renderedObjectsURLCache[key])
 				{
 					img.src = renderedObjectsURLCache[key].blob;
+					img.dataset.baseSrc = src;
 					img.classList.add('blobRendered', 'blobRender');
 					img.style.imageRendering = '';
 					renderQuality = 'processed';
@@ -1087,6 +1190,7 @@ img.src = data.blob;
 							if(queueIndex !== queue.index('readingRender')) return; // Return if the queue is different
 
 							img.src = data.blob;
+							img.dataset.baseSrc = src;
 							img.classList.add('blobRendered', 'blobRender');
 							img.style.imageRendering = '';
 							renderQuality = 'processed';
