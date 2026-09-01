@@ -1,5 +1,6 @@
 
 const recommendations = require(p.join(appDir, '.dist/tracking/recommendations.js'));
+const opdsTrending = require(p.join(appDir, '.dist/opds/trending.js'));
 const RECOMMENDATION_SUPPRESS_DISLIKES = 200;
 const RECOMMENDATION_FAIRNESS_DISLIKE_START = 35;
 const RECOMMENDATION_RECENT_HISTORY_LIMIT = 120;
@@ -373,7 +374,14 @@ async function box(_comics, single, title, order, orderKey = false, orderKey2 = 
 
 function continueReading(comics, single = false)
 {
-	const candidates = buildIndexedBoxCandidates(comics);
+	const hideFromContinueReading = relative.get('hideFromContinueReading') || {};
+	const candidates = buildIndexedBoxCandidates(comics).filter(function(comic){
+		if(!comic?.path)
+			return true;
+
+		return !(hideFromContinueReading[comic.path] || hideFromContinueReading[p.normalize(comic.path)]);
+	});
+
 	let readingCandidates = candidates.filter(function(comic){
 		return +(comic?.readingProgress?.lastReading || 0) > 0;
 	});
@@ -420,14 +428,35 @@ function buildIndexedBoxCandidates(comics = [])
 			continue;
 		}
 
-		// Plain folder items from the current page: keep only if they have direct tracking metadata
-		// (meaning they ARE a manga, not just a category container like "3 Reading").
+		// Plain folder items from the current page: keep if they have direct tracking metadata
+		// (meaning they ARE a manga, not just a category container like "3 Reading") OR the user
+		// has actually read from them. Tracking metadata alone missed any series AniList can't
+		// match (an obscure title, a fan translation, a typo'd folder name) - which meant a manga
+		// read many times could never reach "Continue reading" while still showing up in Recents,
+		// since Recents has no such dependency. Real reading progress is an unambiguous signal on
+		// its own that this is a real series folder, metadata match or not.
+		//
+		// progress.save() also writes an entry for every *ancestor* of the folder actually being
+		// read (mainPath, and separately its own parent when nested deeper) so that folder's own
+		// progress rolls up too, which let a category container that merely contains a
+		// recently-read series (e.g. "3 Reading") leak into Continue reading as if it were the
+		// series itself. `pages` alone cannot tell the two apart: progress.save() zeroes it on any
+		// entry flagged `isParent` (see there), but that flag comes from `reading.currentComics()`
+		// containing folder-like siblings - which is also true of a perfectly real series whose
+		// chapters are themselves archives/PDFs, i.e. most real series, so it zeroes the genuine
+		// entry just as often as an ancestor's. What actually differs is *where* the file that was
+		// read sits: for a real series/leaf folder it was read directly inside it, so the saved
+		// entry's own file path has this exact folder as its immediate parent; for an ancestor
+		// container the file that was read sits one or more folders deeper still.
 		const normalizedPath = p.normalize(comic.path || '');
 		const hasDirectMetadata = !!(trackingFolderMetadata[normalizedPath] || trackingFolderMetadata[comic.path]);
+		const progressForPath = readingProgress[comic.path] || readingProgress[normalizedPath];
+		const readFileParent = progressForPath?.path ? p.normalize(p.dirname(progressForPath.path)) : '';
+		const hasReadingProgress = +(progressForPath?.lastReading || 0) > 0 && readFileParent === normalizedPath;
 
-		if(hasDirectMetadata)
+		if(hasDirectMetadata || hasReadingProgress)
 		{
-			comic.readingProgress = readingProgress[comic.path] || { lastReading: 0 };
+			comic.readingProgress = progressForPath || { lastReading: 0 };
 			filtered.push(comic);
 		}
 	}
@@ -439,6 +468,12 @@ function buildIndexedBoxCandidates(comics = [])
 // series. Caching it avoids a pair of synchronous existsSync/statSync calls per tracked folder
 // on every library render — with a few hundred tracked series that was the single most
 // expensive thing on the page-load path, and it blocks rendering because it is synchronous.
+//
+// This used to also persist across app restarts, keyed by path, in a new storage.js entry. That
+// is reverted: it introduced unbounded, ever-growing state with no proven benefit large enough
+// to justify the risk, and it landed at the same time as reports of the app hanging on
+// navigation and starting up slower. The in-memory, per-session cache below is the version that
+// was measured and is well understood; nothing here writes to disk or reads from it.
 const CANDIDATE_STAT_TTL = 2 * 60 * 1000;
 const candidateStatCache = new Map();
 
@@ -650,6 +685,73 @@ async function recommended(comics, single = false)
 	return box(selectedComics, single, language.comics.recommendedForYou || 'Recommended for you', 'real-numeric', 'recommendationDisplayScore', false, 'recommended');
 }
 
+// Trending/Popular rows on the Catalogs page. Not a library box - the items are AniList
+// entries the user does not own, not comics/folders - so this pushes the same {title, boxes,
+// comics, variant} shape box() produces, but skips everything box() does that only makes sense
+// for local content: thumbnail generation, reading-progress sort, per-folder stat lookups.
+// index.content.right.boxes.html renders these through a dedicated item partial (matched by
+// `variant`) rather than the shared library item template, because that template points its
+// image through shortWindowsPath/encodeSrcURI - path helpers that corrupt a plain https:// URL
+// (they split on path separators and percent-encode the result), so it can only ever be used
+// for local files.
+function pushTrendingBox(title, items, variant)
+{
+	if(!items || !items.length)
+		return;
+
+	// Replace rather than skip: the refresh callback calls this again for the same variant once
+	// real data lands, and that has to overwrite the row built from cache, not be dropped
+	// because a "same variant" entry already exists.
+	handlebarsContext.boxes = handlebarsContext.boxes.filter(function(b) { return b.variant !== variant });
+
+	handlebarsContext.boxes.push({
+		title: title,
+		boxes: true,
+		comics: items,
+		variant: variant,
+	});
+}
+
+/**
+ * Renders whatever is already cached for the AniList discovery rows immediately (nothing, on a
+ * first-ever run), then refreshes in the background and re-renders the boxes section in place
+ * once real data arrives. Deliberately not awaited by callers past the cache read - opds.js
+ * calls this without awaiting the network part, so opening the Catalogs page is never gated on
+ * AniList responding.
+ */
+function trending()
+{
+	const cached = opdsTrending.loadAndRefresh(function(fresh) {
+
+		// .opds-boxes alone is not a safe "still on this page?" check: opds.content.right.
+		// browse.html (browsing into one specific catalog) has its own, unrelated .opds-boxes
+		// wrapper for that catalog's continue-reading/recently-added rows. .opds-page-title only
+		// exists on the Catalogs home page, so requiring both is what actually confirms the user
+		// has not navigated to a different OPDS page (or away from OPDS) before this resolved.
+		if(!document.querySelector('.opds-page-title'))
+			return;
+
+		const container = document.querySelector('.opds-boxes');
+		if(!container)
+			return;
+
+		for(const row of opdsTrending.rows())
+		{
+			if(fresh[row.key])
+				pushTrendingBox(language.global[row.titleKey] || row.key, fresh[row.key], row.variant);
+		}
+
+		container.innerHTML = template.load('index.content.right.boxes.html');
+
+	});
+
+	for(const row of opdsTrending.rows())
+	{
+		if(cached[row.key])
+			pushTrendingBox(language.global[row.titleKey] || row.key, cached[row.key], row.variant);
+	}
+}
+
 function reset()
 {
 	handlebarsContext.boxes = [];
@@ -665,5 +767,6 @@ module.exports = {
 	recommended: recommended,
 	setRecommendationFeedback: setRecommendationFeedback,
 	internalRankingSidebar: internalRankingSidebar,
+	trending: trending,
 	reset: reset,
 };

@@ -11,6 +11,8 @@
 		"labels": "",
 		"editLabels": "",
 		"catalogs": "",
+		"anilistTrendingNow": "",
+		"anilistPopular": "",
 		"images": "",
 		"sort": {
 			"main": "Seřadit",
@@ -50,6 +52,8 @@
 			"deletePermanently": "",
 			"deletePermanentlyConfirm": "",
 			"favorite": "",
+			"hideFromContinueReading": "",
+			"showInContinueReading": "",
 			"openInNewTab": "",
 			"openInNewWindow": "",
 			"markAsRead": "",

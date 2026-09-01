@@ -11,6 +11,8 @@
 		"labels": "Label",
 		"editLabels": "Labels bearbeiten",
 		"catalogs": "Kataloge",
+		"anilistTrendingNow": "",
+		"anilistPopular": "",
 		"images": "Bilder",
 		"sort": {
 			"main": "Sortieren",
@@ -50,6 +52,8 @@
 			"deletePermanently": "Dauerhaft löschen",
 			"deletePermanentlyConfirm": "Möchten Sie diese Datei wirklich dauerhaft löschen? Diese Aktion kann nicht rückgängig gemacht werden.",
 			"favorite": "Favorit",
+			"hideFromContinueReading": "",
+			"showInContinueReading": "",
 			"openInNewTab": "",
 			"openInNewWindow": "",
 			"markAsRead": "Als gelesen markieren",

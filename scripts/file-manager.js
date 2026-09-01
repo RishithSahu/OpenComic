@@ -822,16 +822,28 @@ var file = function (path, _config = false) {
 		let segment = segments.shift();
 		let remaining = segments.length;
 
+		// Always hand back an array. Every falsy result below used to escape as undefined, and
+		// undefined survives the whole way out: readInsideCompressed() returns it, _read() feeds
+		// it to sort(), which only sorts `if (files)` and returns whatever it was given, and sha()
+		// then evaluates undefined.length. That surfaced as "Error when unzipping - Cannot read
+		// properties of undefined (reading 'length')" rather than simply an empty folder.
+		if (!files)
+			return [];
+
 		for (let i = 0, len = files.length; i < len; i++) {
 			let file = files[i];
 
 			if (file.name == segment) {
+				// A matched entry that is a file rather than a folder has no .files.
 				if (remaining == 0)
-					return file.files;
+					return file.files || [];
 				else
 					return this._readFromFilesList(segments, file.files);
 			}
 		}
+
+		// Nothing matched this segment.
+		return [];
 
 	}
 
@@ -2131,7 +2143,24 @@ var fileCompressed = function (path, _realPath = false, forceType = false, prefi
 				this.setFileStatus(name, { extracted: false });
 			}
 
-			return files;
+			// Must end exactly as read7z() does. A ZIP entry name carries its full path inside the
+			// archive ("Some Folder/page001.jpg"), and the rest of the app expects that expanded into
+			// the nested structure read7z() produces: entries whose `name` is just the leaf, plus
+			// `folder: true` nodes holding their children.
+			//
+			// Returning the flat list broke every archive whose pages sit inside a wrapping folder,
+			// which is how most omnibus/scanlation releases are packed. Opening one makes the reader
+			// descend into that folder, which routes through readInsideCompressed() ->
+			// _readFromFilesList(), and that searches for a node named after the folder — which a flat
+			// list does not contain, since its only entries are named "Some Folder/page001.jpg".
+			// ComicInfo.xml inside a subfolder was missed for the same reason, and a nested archive
+			// lacked the `compressed` flag that tells it apart from a page.
+			//
+			// Assigning this.files also restores the per-object read cache; without it every read
+			// reopened and reparsed the archive.
+			this.files = this.filesToMultidimension(files);
+
+			return this.files;
 		}
 		finally
 		{

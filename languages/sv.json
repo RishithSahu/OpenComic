@@ -11,6 +11,8 @@
 		"labels": "Etiketter",
 		"editLabels": "Redigera etiketter",
 		"catalogs": "",
+		"anilistTrendingNow": "",
+		"anilistPopular": "",
 		"images": "Bilder",
 		"sort": {
 			"main": "Sortera",
@@ -50,6 +52,8 @@
 			"deletePermanently": "",
 			"deletePermanentlyConfirm": "",
 			"favorite": "Favoritmarkera",
+			"hideFromContinueReading": "",
+			"showInContinueReading": "",
 			"openInNewTab": "",
 			"openInNewWindow": "",
 			"markAsRead": "",

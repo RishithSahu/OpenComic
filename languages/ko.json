@@ -11,6 +11,8 @@
 		"labels": "라벨",
 		"editLabels": "라벨 관리",
 		"catalogs": "카탈로그",
+		"anilistTrendingNow": "",
+		"anilistPopular": "",
 		"images": "",
 		"sort": {
 			"main": "정렬",
@@ -50,6 +52,8 @@
 			"deletePermanently": "영구 삭제",
 			"deletePermanentlyConfirm": "정말로 영구 삭제 하겠습니까? 이 작업은 되돌릴 수 없습니다.",
 			"favorite": "즐겨찾기",
+			"hideFromContinueReading": "",
+			"showInContinueReading": "",
 			"openInNewTab": "",
 			"openInNewWindow": "",
 			"markAsRead": "읽음으로 표시",

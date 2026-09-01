@@ -1085,7 +1085,26 @@ a:hover
 
 .bar-right-buttons
 {
-	float: right;
+	/* Was float: right. A long .bar-title (a deep breadcrumb, or - as with a scanlation/omnibus
+	   archive - one very long path segment) is a plain block-flow sibling that comes before this
+	   element, and its own max-width is a calc() against the *shared parent* width, not against
+	   whatever this element actually needs - so on a long enough title there was nothing stopping
+	   the combined width demand from exceeding the header, at which point the float wrapped onto a
+	   second line and .bar-header (fixed 48px height, overflow: hidden) clipped that line out of
+	   view entirely: every icon in the bar gone at once, not shrunk or squeezed.
+	   Absolute positioning removes this element from that flow interaction altogether - it is
+	   pinned to the header's own top-right corner regardless of what .bar-title does, so it can no
+	   longer be pushed onto a line that gets clipped. max-width/overflow-x still bound it to a
+	   sensible width and let it scroll internally if the icon set itself is ever too wide. */
+	position: absolute;
+	top: 0px;
+	/* 50px, not 0 - offsets on an absolutely positioned box are measured from the containing
+	   block's padding edge, not inset further by its own padding the way a float is. The
+	   containing block here (.bar-header > div) has padding: 0px 50px, so right: 0px sat this
+	   whole row 50px further right than the float version did, pushing its rightmost button -
+	   more_vert, first in DOM order and therefore the one that floats furthest right within the
+	   row - out past the header's own clipped edge while everything to its left still fit. */
+	right: 50px;
 	max-width: calc(100% - 160px);
 	overflow-x: auto;
 	overflow-y: hidden;

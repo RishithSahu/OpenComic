@@ -11,6 +11,8 @@
 		"labels": "Мітки",
 		"editLabels": "Змінити мітки",
 		"catalogs": "Каталоги",
+		"anilistTrendingNow": "",
+		"anilistPopular": "",
 		"images": "Зображення",
 		"sort": {
 			"main": "Сортування",
@@ -50,6 +52,8 @@
 			"deletePermanently": "Видалити назавжди",
 			"deletePermanentlyConfirm": "Ви дійсно хочете назавжди видалити цей файл? Цю дію неможливо скасувати.",
 			"favorite": "Обране",
+			"hideFromContinueReading": "",
+			"showInContinueReading": "",
 			"openInNewTab": "",
 			"openInNewWindow": "Відкрити в новому вікні",
 			"markAsRead": "Позначити як прочитане",

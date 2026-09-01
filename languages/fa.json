@@ -11,6 +11,8 @@
 		"labels": "برچسب‌ها",
 		"editLabels": "ویرایش برچسب‌ها",
 		"catalogs": "کاتالوگ‌ها",
+		"anilistTrendingNow": "",
+		"anilistPopular": "",
 		"images": "تصاویر",
 		"sort": {
 			"main": "مرتب‌سازی",
@@ -50,6 +52,8 @@
 			"deletePermanently": "حذف دائمی",
 			"deletePermanentlyConfirm": "آیا واقعاً می‌خواهید این فایل را برای همیشه حذف کنید؟ این عمل قابل بازگشت نیست",
 			"favorite": "افزودن به علاقه‌مندی‌ها",
+			"hideFromContinueReading": "",
+			"showInContinueReading": "",
 			"openInNewTab": "باز کردن در زبانه جدید",
 			"openInNewWindow": "باز کردن در پنجره جدید",
 			"markAsRead": "علامت‌گذاری به‌عنوان خوانده‌شده",

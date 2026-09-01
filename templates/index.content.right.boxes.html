@@ -11,8 +11,16 @@
       <div
         class="content-view-module content-view-module-{{@root.page.viewModuleSize}}"
       >
+        {{#compare variant '==' 'anilist-trending'}}
+        {{#each comics}} {{> index.content.right.trending.item.html parent=..}}
+        {{/each}}
+        {{else compare variant '==' 'anilist-popular'}}
+        {{#each comics}} {{> index.content.right.trending.item.html parent=..}}
+        {{/each}}
+        {{else}}
         {{#each comics}} {{> index.content.right.module.item.html parent=..}}
         {{/each}}
+        {{/compare}}
       </div>
     </div>
   </div>

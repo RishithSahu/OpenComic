@@ -11,6 +11,8 @@
 		"labels": "Nhãn",
 		"editLabels": "Sửa nhãn",
 		"catalogs": "",
+		"anilistTrendingNow": "",
+		"anilistPopular": "",
 		"images": "Hình ảnh",
 		"sort": {
 			"main": "Lọc",
@@ -50,6 +52,8 @@
 			"deletePermanently": "",
 			"deletePermanentlyConfirm": "",
 			"favorite": "Yêu thích",
+			"hideFromContinueReading": "",
+			"showInContinueReading": "",
 			"openInNewTab": "",
 			"openInNewWindow": "",
 			"markAsRead": "",

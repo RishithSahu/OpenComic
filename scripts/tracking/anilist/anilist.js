@@ -303,6 +303,74 @@ function normalizeSeriesType(countryOfOrigin = '')
 	return '';
 }
 
+// Manga discovery for the Catalogs page. Unlike getComicMetadata() this isn't looking up one
+// known title — it asks AniList's own ranking for what belongs in a "Trending"/"Popular" row,
+// so it returns a normalized *list* rather than one media entry, and skips the fields that only
+// matter once a specific title has been picked (description, chapters/volumes, staff).
+async function getTrending(sort = 'TRENDING_DESC', perPage = 20)
+{
+	const query = `
+	query ($sort: [MediaSort], $perPage: Int) {
+		Page (page: 1, perPage: $perPage) {
+			media (type: MANGA, sort: $sort, isAdult: false) {
+				id
+				averageScore
+				countryOfOrigin
+				coverImage {
+					medium
+					large
+					extraLarge
+				}
+				title {
+					romaji
+					english
+					native
+					userPreferred
+				}
+			}
+		}
+	}
+	`;
+
+	const variables = {
+		sort: [sort],
+		perPage: perPage,
+	};
+
+	const body = { query: query, variables: variables };
+
+	try
+	{
+		const response = await _graphQLFetch(body, {}, 3);
+		if(!response || response.status !== 200)
+			return [];
+
+		const json = await response.json();
+		const media = json?.data?.Page?.media || [];
+
+		return media.map(function(item) {
+
+			return {
+				id: item.id,
+				// Named `name`, not `title`: every comic-shaped object rendered by the box
+				// templates uses `name` for its display title, and these go through that same
+				// rendering path (see index.content.right.trending.item.html).
+				name: item?.title?.userPreferred || item?.title?.romaji || item?.title?.english || item?.title?.native || '',
+				image: item?.coverImage?.large || item?.coverImage?.extraLarge || item?.coverImage?.medium || '',
+				// Built here rather than in the template: AniList redirects /manga/<id> to the
+				// full slugged URL on its own, so the id alone is a complete, valid link.
+				url: 'https://anilist.co/manga/' + item.id,
+				rating: +(item?.averageScore || 0),
+				seriesType: normalizeSeriesType(item?.countryOfOrigin),
+			};
+
+		}).filter(function(item) { return item.id && item.name });
+	}
+	catch(error) {}
+
+	return [];
+}
+
 async function getComicMetadata(siteId)
 {
 	const query = `
@@ -642,6 +710,7 @@ async function track(toTrack)
 module.exports = {
 	setSiteData: setSiteData,
 	searchComic: searchComic,
+	getTrending: getTrending,
 	getComicMetadata: getComicMetadata,
 	getComicData: getComicData,
 	login: login,

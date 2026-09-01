@@ -11,6 +11,8 @@
 		"labels": "Etiketler",
 		"editLabels": "Etiketleri Düzenle",
 		"catalogs": "Kataloglar",
+		"anilistTrendingNow": "",
+		"anilistPopular": "",
 		"images": "Görseller",
 		"sort": {
 			"main": "Sırala",
@@ -50,6 +52,8 @@
 			"deletePermanently": "Kalıcı olarak sil",
 			"deletePermanentlyConfirm": "Bu dosyayı kalıcı olarak silmek istediğinize emin misiniz? Bu işlem geri alınamaz",
 			"favorite": "Favorilere ekle",
+			"hideFromContinueReading": "",
+			"showInContinueReading": "",
 			"openInNewTab": "",
 			"openInNewWindow": "",
 			"markAsRead": "",

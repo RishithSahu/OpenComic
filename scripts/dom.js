@@ -530,7 +530,12 @@ async function readFilesIndexPage(path, mainPath, fromGoBack, notAutomaticBrowsi
 
 	file.destroy();
 
-	if (config.ignoreSingleFoldersLibrary && !fromGoBack && !fromGoForwards && !notAutomaticBrowsing && files.length == 1 && (files[0].folder || files[0].compressed)) {
+	// Only unwrap a lone plain subfolder here (e.g. "Series/Volume 1/" holding just "Volume 1/pages"),
+	// never a lone compressed file: recursing into it flips openingBehavior from
+	// config.openingBehaviorFolder to config.openingBehaviorFile, whose default
+	// ('continue-reading-first-page') then jumps straight into the reader - so browsing into a
+	// folder containing a single archive skipped the folder page entirely and opened the comic.
+	if (config.ignoreSingleFoldersLibrary && !fromGoBack && !fromGoForwards && !notAutomaticBrowsing && files.length == 1 && files[0].folder) {
 		return readFilesIndexPage(files[0].path, mainPath, fromGoBack, notAutomaticBrowsing, fromGoForwards);
 	}
 
@@ -1307,8 +1312,19 @@ async function loadIndexPage(animation = true, path = false, content = false, ke
 		handlebarsContext.comicsDeep2 = path.replace(new RegExp('^\s*' + pregQuote(mainPathR)), '').split(p.sep).length >= 2 ? true : false;
 		dom.setCurrentPageVars('browsing', { filter: _indexLabel?.filter || {} });
 
-		if (handlebarsContext.comicsDeep2)
-			showIfHasPrevOrNext(path, mainPath);
+		if (handlebarsContext.comicsDeep2) {
+			// nextComic()/previousComic() open the sibling archive to peek at its first page, real
+			// I/O that can fail (a very long combined path, a corrupted archive, a permission
+			// issue) - this call is intentionally not awaited so it does not block the header from
+			// rendering, but that also means an unhandled rejection here previously left the
+			// prev/next-chapter buttons stuck in whatever state the template happened to start
+			// them in, with nothing surfaced about why.
+			showIfHasPrevOrNext(path, mainPath).catch(function (error) {
+
+				console.error('Failed to check for previous/next chapter:', error);
+
+			});
+		}
 
 		headerPath(path, mainPath);
 
@@ -1814,30 +1830,55 @@ async function selectFolderThumbnailSource(file, path) {
 
 	const coverRegex = /^cover(?:[\s._-].*)?\.[a-z0-9]+$/i;
 
-	let coverImage = false;
-	let firstImage = false;
-	let firstFile = false;
+	// Wrapper folders are common in omnibus/scanlation releases: the whole archive is often one
+	// top-level folder holding every page (or one folder per included volume), rather than
+	// pages sitting directly at the archive root. The old version of this loop skipped any
+	// `folder: true` entry outright instead of looking inside it, so an archive packed that way
+	// never got a thumbnail - firstFile/firstImage stayed unset, and the function fell straight
+	// through to "return false". pickThumbnailCandidate() recurses into folders instead, so it
+	// finds the same cover/first-image/first-file candidates wherever in the tree they are.
+	function pickThumbnailCandidate(items) {
+		let coverImage = false;
+		let firstImage = false;
+		let firstFile = false;
 
-	for (const item of fullFiltered) {
-		if (item.folder)
-			continue;
+		for (const item of items) {
+			if (item.folder) {
+				const nested = pickThumbnailCandidate(item.files || []);
 
-		if (!firstFile)
-			firstFile = item;
+				if (nested.coverImage)
+					return nested; // Propagate the short-circuit all the way up.
 
-		if (item.compressed)
-			continue;
+				if (!firstImage && nested.firstImage)
+					firstImage = nested.firstImage;
 
-		if (compatible.image(item.path)) {
-			if (!firstImage)
-				firstImage = item;
+				if (!firstFile && nested.firstFile)
+					firstFile = nested.firstFile;
 
-			if (coverRegex.test(item.name)) {
-				coverImage = item;
-				break;
+				continue;
+			}
+
+			if (!firstFile)
+				firstFile = item;
+
+			if (item.compressed)
+				continue;
+
+			if (compatible.image(item.path)) {
+				if (!firstImage)
+					firstImage = item;
+
+				if (coverRegex.test(item.name)) {
+					coverImage = item;
+					return { coverImage, firstImage, firstFile };
+				}
 			}
 		}
+
+		return { coverImage, firstImage, firstFile };
 	}
+
+	const { coverImage, firstImage, firstFile } = pickThumbnailCandidate(fullFiltered);
 
 	const pickedImage = coverImage || firstImage;
 

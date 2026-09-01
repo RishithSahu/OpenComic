@@ -238,6 +238,12 @@ async function home()
 
 	await boxes();
 
+	// Cache-only and synchronous as far as this call is concerned: whatever is already cached
+	// from a previous visit gets pushed into the boxes below before this returns. The real
+	// AniList fetch happens in the background and re-renders the same section once it lands, so
+	// opening this page is never gated on it.
+	dom.boxes.trending();
+
 	template.loadHeader('opds.header.html', true);
 	template.loadContentRight('opds.content.right.home.html', true);
 

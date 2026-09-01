@@ -11,6 +11,8 @@
 		"labels": "Метки",
 		"editLabels": "Изменить метки",
 		"catalogs": "Каталоги",
+		"anilistTrendingNow": "",
+		"anilistPopular": "",
 		"images": "Изображения",
 		"sort": {
 			"main": "Сортировка",
@@ -50,6 +52,8 @@
 			"deletePermanently": "Удалить навсегда",
 			"deletePermanentlyConfirm": "Вы действительно хотите безвозвратно удалить этот файл? Это действие нельзя отменить",
 			"favorite": "В избранное",
+			"hideFromContinueReading": "",
+			"showInContinueReading": "",
 			"openInNewTab": "",
 			"openInNewWindow": "",
 			"markAsRead": "Отметить как прочитанное",

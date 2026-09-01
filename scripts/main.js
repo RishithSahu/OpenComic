@@ -268,14 +268,54 @@ function createWindow(options = {}) {
 				showWindowTimeout = false;
 			}
 
-			win.webContents.executeJavaScript('const saved = reading.progress.save(); tabs.restore.save(false, true); settings.purgeTemporaryFiles(); cache.purge(); ebook.closeAllRenders(); workers.closeAllWorkers(); storage.purgeOldAtomic(); saved;', false).then(function (value) {
+			// Only reading progress and the tab list are things the user is actually waiting
+			// on. Both calls below are synchronous and just hand off to electron-json-storage's
+			// own async fs.writeFile, so this resolves in well under a millisecond of real work
+			// - the write itself lands in the background, off the JS thread.
+			win.webContents.executeJavaScript('reading.progress.save(); tabs.restore.save(false, true);', false).then(function () {
 
+				// The window disappearing IS "closed" as far as the user can tell, so nothing
+				// past this point should be able to delay it. Before this fix everything below
+				// ran first, inline, and blocked hide(): settings.purgeTemporaryFiles() and
+				// cache.purge() each recursively walk their entire folder twice (once to delete
+				// unreferenced files, once via dirSizeSync() to total what is left), synchronously,
+				// on the renderer's JS thread. Neither is proportional to anything the user did
+				// this session - both scale with how much has accumulated in temp/cache over the
+				// app's whole lifetime - which is exactly why close time could grow to several
+				// seconds independent of how large a comic was just open.
 				win.hide();
 
-				// Wait for it to save
-				setTimeout(function (win) {
-					win.close();
-				}, 500, win);
+				const rendererAlive = win && !win.isDestroyed() && win.webContents && !win.webContents.isDestroyed();
+
+				// Runs in the background now that the window is already gone. Still needs the
+				// renderer's JS environment - config/storage/fileManager/etc are renderer
+				// globals, not something the main process has - so it runs there rather than
+				// being ported, but nothing here is awaited before the app is allowed to exit
+				// except the safety cap below.
+				const cleanupDone = rendererAlive
+					? win.webContents.executeJavaScript('settings.purgeTemporaryFiles(); cache.purge(); ebook.closeAllRenders(); workers.closeAllWorkers(); storage.purgeOldAtomic();', false).catch(function (error) {
+
+						console.error('Error during background close cleanup:', error);
+
+					})
+					: Promise.resolve();
+
+				const closeNow = function () {
+
+					if (win && !win.isDestroyed())
+						win.close();
+
+				};
+
+				// A floor as well as a cap. The floor (200ms, same margin the catch branch below
+				// already used) gives the async progress/tab writes just kicked off time to land
+				// before the renderer is torn down. The cap (5s) means a slow disk doing the
+				// background cleanup can never hold the app open indefinitely. Neither delays
+				// what the user sees, since the window was already hidden above.
+				Promise.race([
+					Promise.all([cleanupDone, new Promise(function (resolve) { setTimeout(resolve, 200) })]),
+					new Promise(function (resolve) { setTimeout(resolve, 5000) }),
+				]).then(closeNow, closeNow);
 
 			}).catch(function (error) {
 

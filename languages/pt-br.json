@@ -11,6 +11,8 @@
 		"labels": "Etiqueta",
 		"editLabels": "Editar etiquetas",
 		"catalogs": "Catálogos",
+		"anilistTrendingNow": "",
+		"anilistPopular": "",
 		"images": "Imagens",
 		"sort": {
 			"main": "Ordenar",
@@ -50,6 +52,8 @@
 			"deletePermanently": "Apagar permanentemente",
 			"deletePermanentlyConfirm": "Você realmente deseja apagar permanentemente esse arquivo? Essa ação não pode ser desfeita",
 			"favorite": "Favoritar",
+			"hideFromContinueReading": "",
+			"showInContinueReading": "",
 			"openInNewTab": "",
 			"openInNewWindow": "",
 			"markAsRead": "",

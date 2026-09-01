@@ -11,6 +11,8 @@
 		"labels": "ป้ายกำกับ",
 		"editLabels": "แก้ไขป้ายกำกับ",
 		"catalogs": "หมวดหมู่",
+		"anilistTrendingNow": "",
+		"anilistPopular": "",
 		"images": "รูปภาพ",
 		"sort": {
 			"main": "เรียงตาม",
@@ -50,6 +52,8 @@
 			"deletePermanently": "ลบอย่างถาวร",
 			"deletePermanentlyConfirm": "คุณต้องการลบไฟล์นี้อย่างถาวรจริงหรือไม่? การกระทำนี้ไม่สามารถยกเลิกได้",
 			"favorite": "เรื่องที่ชอบ",
+			"hideFromContinueReading": "",
+			"showInContinueReading": "",
 			"openInNewTab": "",
 			"openInNewWindow": "",
 			"markAsRead": "",

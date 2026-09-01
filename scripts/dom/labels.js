@@ -154,6 +154,27 @@ function setFavorite(path)
 		dom.reload();
 }
 
+function setHideFromContinueReading(path)
+{
+	path = relative.path(path);
+	let hidden = storage.get('hideFromContinueReading');
+
+	if(hidden[path])
+		delete hidden[path];
+	else
+		hidden[path] = true;
+
+	storage.set('hideFromContinueReading', hidden);
+
+	dom.reload();
+}
+
+function isHiddenFromContinueReading(path)
+{
+	const hidden = relative.get('hideFromContinueReading');
+	return !!hidden[path];
+}
+
 function favoritesData()
 {
 	return {favorites: true, name: language.global.favorites};
@@ -1229,6 +1250,8 @@ module.exports = {
 	masterFolder,
 	setFavorite,
 	favorites,
+	setHideFromContinueReading,
+	isHiddenFromContinueReading,
 	opds: _opds,
 	label,
 	server,

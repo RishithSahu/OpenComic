@@ -351,6 +351,9 @@ const storageDefault = {
 			added: 0,
 		}
 	},
+	hideFromContinueReading: {
+		wildcard: true,
+	},
 	labels: [
 		'',
 	],

@@ -1035,7 +1035,7 @@ async function render(index, _scale = false, magnifyingGlass = false, queueIndex
 				{
 					const data = renderedObjectsURLCache[key];
 					syncRenderedPdfDimensions(index, imageData, data);
-					img.src = data.blob;
+					img.src = await decodeBeforeSwap(data.blob);
 					img.dataset.baseSrc = src;
 					img.classList.add('blobRendered', 'blobRender', 'sizeFromImg');
 					img.style.imageRendering = '';
@@ -1090,7 +1090,7 @@ async function render(index, _scale = false, magnifyingGlass = false, queueIndex
 
 												if(queueIndex !== queue.index('readingRender')) return; // Return if the queue is different
 
-												img.src = aiData.blob;
+												img.src = await decodeBeforeSwap(aiData.blob);
 												img.dataset.baseSrc = src;
 												img.classList.add('blobRendered', 'blobRender');
 												img.style.imageRendering = '';
@@ -1120,7 +1120,7 @@ async function render(index, _scale = false, magnifyingGlass = false, queueIndex
 
 									if (queueIndex !== queue.index('readingRender')) return; // Return if the queue is different
 
-img.src = data.blob;
+img.src = await decodeBeforeSwap(data.blob);
 img.dataset.baseSrc = src;
 								img.classList.add('blobRendered', 'blobRender', 'sizeFromImg');
 								img.style.imageRendering = '';
@@ -1158,7 +1158,7 @@ img.dataset.baseSrc = src;
 				}
 				else if(renderedObjectsURLCache[key])
 				{
-					img.src = renderedObjectsURLCache[key].blob;
+					img.src = await decodeBeforeSwap(renderedObjectsURLCache[key].blob);
 					img.dataset.baseSrc = src;
 					img.classList.add('blobRendered', 'blobRender');
 					img.style.imageRendering = '';
@@ -1189,7 +1189,7 @@ img.dataset.baseSrc = src;
 
 							if(queueIndex !== queue.index('readingRender')) return; // Return if the queue is different
 
-							img.src = data.blob;
+							img.src = await decodeBeforeSwap(data.blob);
 							img.dataset.baseSrc = src;
 							img.classList.add('blobRendered', 'blobRender');
 							img.style.imageRendering = '';
@@ -1272,6 +1272,26 @@ async function srcToImage(src, img)
 	img.dataset.baseSrc = src;
 
 	return true;
+}
+
+// The visible <img> is usually already showing a fast/raw preview of this same page when the
+// 'processed' (resized/rendered) blob is ready to take over. Assigning it straight to img.src
+// makes the browser blank the element for however long that blob takes to decode - imperceptible
+// for a small page, but a visible flash-to-blank-and-back on a big one (a large page, or a PDF
+// rendered at a high DPI). Decoding the blob off-DOM first and only swapping img.src once decode
+// resolves lets the browser paint it immediately, since the decoded bitmap is already in its
+// image cache under that blob URL.
+async function decodeBeforeSwap(src)
+{
+	try
+	{
+		const pre = new Image();
+		pre.src = src;
+		await pre.decode();
+	}
+	catch(error) {}
+
+	return src;
 }
 
 async function decodeImage(img, sync = false)

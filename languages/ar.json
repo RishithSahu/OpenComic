@@ -11,6 +11,8 @@
 		"labels": "التصنيفات",
 		"editLabels": "تعديل التصنيفات",
 		"catalogs": "الفهرس",
+		"anilistTrendingNow": "",
+		"anilistPopular": "",
 		"images": "الصور",
 		"sort": {
 			"main": "الترتيب",
@@ -50,6 +52,8 @@
 			"deletePermanently": "الحذف نهائياً",
 			"deletePermanentlyConfirm": "هل تريد الحذف نهائياً؟ لا يمكن التراجع عن هذه الخطوة",
 			"favorite": "المفضلة",
+			"hideFromContinueReading": "",
+			"showInContinueReading": "",
 			"openInNewTab": "",
 			"openInNewWindow": "",
 			"markAsRead": "",

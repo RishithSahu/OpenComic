@@ -65,6 +65,9 @@ Roughly 160 fork changes across `v1.7.0` → `v1.8.1`. The highlights:
 - **Continue reading**, **Recommended for you** and **Recently added** rows with cover art and metadata
 - Thumbs up/down recommendation feedback with anti-repeat rotation and fairness weighting, plus an
   optional ranking sidebar combining the AniList score with your own likes and dislikes
+- **AniList "Trending Now" / "Popular" rows on the Catalogs page**, so it pulls its weight for a
+  manga-focused library instead of only listing upstream's general-fiction catalogs. Loaded and
+  refreshed only when the page is opened, cached locally, and never touches startup time
 
 ##### 🔎 Search
 
@@ -87,6 +90,17 @@ See [Performance](#performance) for the measurements.
 - Fixed the library search hanging indefinitely on an unreadable folder
 - Every AI tool (Artifact Removal, Descreen, Upscale) now works on PDFs, at the right resolution, without
   leaking blob memory or flickering on every page turn
+- Fixed a crash opening CBZ archives packed as a wrapping folder (common in omnibus/scanlation
+  releases), and their library thumbnails never appearing
+- Fixed a hang and slower startup introduced by an in-progress performance experiment
+- Fixed the header bar's icon row (sort, zoom, filters, bookmarks) disappearing for a long comic/folder
+  title
+- Fixed a manga never appearing in **Continue reading** despite being read repeatedly, when AniList
+  couldn't match its title — actual reading progress is now enough on its own
+- Fixed browsing into a folder holding a single archive jumping straight into the reader instead of
+  showing that folder
+- Fixed zoom resetting on every chapter change in webtoon/scroll view even with "keep zoom" enabled
+- Fixed a brief blank flash on every page turn, and stutter while scrolling fast through webtoons
 
 ##### 🎓 Quality of life
 

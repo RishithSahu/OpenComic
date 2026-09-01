@@ -859,9 +859,21 @@ function goToImageCL(index, animation = true, fromScroll = false, fromPageRange 
 	readingTurnPerf.lastTurnAt = now;
 
 	if (!fromPageRange) {
-		render.focusIndex(index, doublePage.active());
-
 		if (rapidTurn) {
+			// render.focusIndex() is the expensive one here - it primes/decodes upcoming images,
+			// walks every rendered <img> to prune the blob cache, and measures visible pages
+			// (forcing layout) to build the render queue. In scroll/webtoon view, a fast continuous
+			// scroll can cross a page boundary on nearly every animation frame, and this used to
+			// run its full body on every single one of those, competing with the browser's own
+			// scroll compositing for the frame budget - the stutter-then-catch-up the reader felt.
+			// filters/music already coalesce themselves the same way during a rapid run of turns;
+			// this was the actual expensive call left ungated. Throttled, not dropped: the trailing
+			// call always still runs with the latest index, so the queue never falls behind for
+			// longer than the throttle window.
+			app.setThrottle('reading-render-focus-index', function () {
+				render.focusIndex(index, doublePage.active());
+			}, 60, 160);
+
 			app.setThrottle('reading-filters-focus-index', function () {
 				filters.focusIndex(index);
 			}, 70, 180);
@@ -871,6 +883,7 @@ function goToImageCL(index, animation = true, fromScroll = false, fromPageRange 
 			}, 120, 280);
 		}
 		else {
+			render.focusIndex(index, doublePage.active());
 			filters.focusIndex(index);
 			music.focusIndex(index);
 		}
@@ -5784,6 +5797,15 @@ var touchTimeout, mouseleave = { lens: false, body: false, window: false }, isMo
 
 //It starts with the reading of a comic, events, argar images, counting images ...
 async function read(path, index = 1, end = false, isCanvas = false, isEbook = false, imagePath = false) {
+	// "Keep zoom" (config.readingGlobalZoom for scroll/webtoon views, readingGlobalZoomSlide
+	// otherwise - the same settings resetZoom() itself already honors elsewhere) is meant to carry
+	// the zoom level across pages without the reader snapping back to fit-to-width. For a webtoon,
+	// moving to the next chapter is just another read() call here, same as moving to the next page
+	// - but the reset below ran unconditionally, so the zoom held for an entire chapter was thrown
+	// away the instant the next one opened, even with "keep zoom" on.
+	const keepZoom = (config.readingGlobalZoom && readingViewIs('scroll')) || (config.readingGlobalZoomSlide && !readingViewIs('scroll'));
+	const keptScale = currentScale;
+
 	images = {}, imagesData = {}, imagesDataClip = {}, imagesPath = {}, imagesPosition = {}, imagesFullPosition = {}, prevImagesFullPosition = {}, imagesScrollRanges = [], imagesNum = 0, contentNum = 0, imagesNumLoad = 0, currentIndex = index, foldersPosition = {}, currentScale = 1, currentZoomIndex = false, previousScrollTop = 0, scalePrevData = { tranX: 0, tranX2: 0, tranY: 0, tranY2: 0, scale: 1, scrollTop: 0 }, originalRect = false, scrollInStart = false, scrollInEnd = false, prevChangeHeaderButtons = {}, trackingCurrent = false, pageRangeHistory = [], showComicSkip = false;
 
 	isLoaded = false;
@@ -6437,6 +6459,13 @@ async function read(path, index = 1, end = false, isCanvas = false, isEbook = fa
 
 		reading.isLoad();
 	}
+
+	// Re-apply the zoom level carried over from the previous chapter (see keepZoom above), now
+	// that this chapter's pages exist in the DOM. applyScale() only redraws its transform when
+	// the requested scale differs from scalePrevData.scale, which the reset above already left at
+	// 1, so this reliably takes effect instead of being skipped as a no-op.
+	if (keepZoom && keptScale != 1 && !isEbook)
+		applyScale(false, keptScale, true);
 
 	// Make the current comic eligible for the home continue-reading card immediately.
 	progress.activeSave();

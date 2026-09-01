@@ -1,0 +1,13 @@
+<div class="gamepad-item{{#if @first}} gamepad-to-highlight{{/if}}" data-name="{{name}}" hover-text="{{name}}" onclick="electron.shell.openExternal('{{chain 'escapeQuotesSimples' url}}');">
+	<div class="v-img">
+		<picture>
+			<img class="item-image active border" src="{{image}}" loading="lazy">
+		</picture>
+	</div>
+	<div class="v-text body-small">{{name}}</div>
+	{{#if rating}}
+	<div class="v-secondary-text body-small">★ {{rating}}/100</div>
+	{{else}}
+	<div class="v-secondary-text body-small">&nbsp;</div>
+	{{/if}}
+</div>
