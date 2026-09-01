@@ -194,10 +194,15 @@ You can see the changes between versions in the [Changelog 📝](/CHANGELOG.md)
 
 ### This fork
 
-**[Windows x64 installer — `v1.8.1`](https://github.com/RishithSahu/OpenComic/releases/latest)**
+**[Releases — `v1.8.1`](https://github.com/RishithSahu/OpenComic/releases/latest)**
 
-The build is unsigned, so Windows SmartScreen will warn the first time you run it — choose
-**More info ▸ Run anyway**. For macOS and Linux, [build from source](#build-from-source).
+- **Windows x64**: NSIS installer. The build is unsigned, so Windows SmartScreen will warn the
+  first time you run it — choose **More info ▸ Run anyway**.
+- **Linux x64**: generic `.7z`, `.tar.gz` and `.zip` archives (extract and run `opencomic`).
+  Distro packages (`.deb`, `.rpm`, `AppImage`) aren't published yet — until then, use one of the
+  archives above or [build from source](#build-from-source).
+- **macOS**: no prebuilt build yet — a signed/notarized `.dmg` needs to be built on macOS itself,
+  which this fork isn't set up to do. [Build from source](#build-from-source) in the meantime.
 
 ### Upstream
 
