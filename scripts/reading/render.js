@@ -176,6 +176,12 @@ function setMagnifyingGlassStatus(active = false, doublePage = false)
 
 var sendToQueueST = false;
 
+// Rasterising a page costs, in both time and memory, the square of this number - and so does
+// every bitmap decoded from the result and held in the blob cache. 2600 still covers a
+// full-height page on a 4K display at the capped pixel ratio above; past it the reader was
+// paying for detail no window was showing.
+const PDF_RENDER_MAX_WIDTH = 2600;
+
 function isPdfCanvasMode()
 {
 	if(!renderCanvas || !file || !file.getFeatures)
@@ -194,11 +200,12 @@ function isPdfCanvasMode()
 
 function getQueueLimits()
 {
-	// PDF pages are rasterised one by one and are by far the most expensive thing to produce.
-	// Queueing 10 before + 10 after every turn cost far more than it bought, especially since
-	// renderedBlobLimit() only keeps a handful of PDF blobs alive: most of that work was
-	// evicted before it could ever be shown, so the reader spent its time re-rendering pages
-	// it had already rendered. Keep the window smaller than the blob budget instead.
+	// PDF pages are rasterised one by one, so this window has to stay well inside what
+	// renderedBlobLimit() will keep alive - otherwise pages are evicted before they are ever
+	// shown and the reader spends its time re-rendering what it already rendered. A page now
+	// costs roughly a fifth of what it used to (native image decoding, JPEG instead of PNG),
+	// but widening it was measured and made things worse: what a cached page really costs is
+	// not its blob but the bitmap Chromium decodes from it, and that is unchanged.
 	if(isPdfCanvasMode())
 		return { prev: 3, next: 6 };
 
@@ -471,7 +478,7 @@ async function setEbookConfigChanged(ebookConfig)
 		ebook.updateConfig(ebookConfig);
 }
 
-async function focusIndex(index, _doublePage = false)
+async function focusIndex(index, _doublePage = false, runAi = true)
 {
 	if(!file && !renderImages) return;
 
@@ -506,7 +513,14 @@ async function focusIndex(index, _doublePage = false)
 	const limits = getQueueLimits();
 	const prioritizeNext = getPrioritizeNextWindow(_doublePage);
 
-	setRenderQueue(immediateQueue.prev, immediateQueue.next, false, false, prioritizeNext);
+	// `runAi` is false only for the throttled call made during a rapid run of page turns (see
+	// the caller in reading.js). For a PDF page that matters far more than for any other format:
+	// unlike a CBZ image, which already sits decoded on disk, an AI step here first has to
+	// rasterise the PDF page to a JPEG on the main thread (see rasterizePdfPage()) before the AI
+	// model ever sees it - a second full render on top of the one already needed just to show
+	// the page. Skipping it here does not lose the AI pass permanently: the settled call below,
+	// 180ms after scrolling actually stops, always runs with AI back on.
+	setRenderQueue(immediateQueue.prev, immediateQueue.next, false, false, prioritizeNext, runAi);
 
 	sendToQueueST = setTimeout(function(){
 
@@ -584,6 +598,11 @@ function renderedBlobLimit()
 		// Must stay comfortably above getQueueLimits() for PDFs (3 + 6 + the current page),
 		// otherwise freshly rendered pages are evicted before they are displayed and the
 		// reader thrashes, re-rendering the same pages on every turn.
+		//
+		// Do not raise this because the blobs themselves got smaller. Measured on a 164MB
+		// file, going from 12/16 to 28/40 took the app from 1.2GB to 2.2GB: an entry in this
+		// list keeps an <img> alive, and what that costs is the bitmap Chromium decodes from
+		// the blob - width x height x 4, tens of megabytes - not the encoded bytes.
 		if(features && features.pdf)
 			return file?.pdfFastRead ? 12 : 16;
 	}
@@ -908,6 +927,10 @@ async function render(index, _scale = false, magnifyingGlass = false, queueIndex
 			let renderDevicePixelRatio = window.devicePixelRatio;
 			if(isPdfCanvasMode())
 			{
+				// Keyed off pdfFastRead, which now covers most documents rather than only huge
+				// ones. That is deliberate: this ratio multiplies the pixels in the canvas AND
+				// in the bitmap Chromium decodes for every cached page, so raising it to 1.25
+				// across the board was measured at several hundred megabytes on a large file.
 				const pdfDevicePixelRatioCap = file?.pdfFastRead ? 1 : 1.25;
 				renderDevicePixelRatio = Math.min(renderDevicePixelRatio, pdfDevicePixelRatioCap);
 			}
@@ -950,7 +973,7 @@ async function render(index, _scale = false, magnifyingGlass = false, queueIndex
 				const aiExtractWidth = Math.max(1, Math.min(
 					_config.width,
 					config.renderMaxWidth,
-					file?.pdfFastRead ? 2800 : 3200
+					PDF_RENDER_MAX_WIDTH
 				));
 
 				const extracted = file.getFileStatus ? file.getFileStatus(aiPageName) : false;
@@ -1021,7 +1044,7 @@ async function render(index, _scale = false, magnifyingGlass = false, queueIndex
 			{
 				let maxWidth = config.renderMaxWidth;
 				if(isPdfCanvasMode())
-					maxWidth = Math.min(maxWidth, file?.pdfFastRead ? 2800 : 3200);
+					maxWidth = Math.min(maxWidth, PDF_RENDER_MAX_WIDTH);
 
 				if(_config.width > maxWidth)
 				{

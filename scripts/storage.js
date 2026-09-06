@@ -1,7 +1,7 @@
 const safe = require(p.join(appDir, '.dist/storage/safe.js')),
 	syncInstances = require(p.join(appDir, '.dist/storage/sync-instances.js'));
 
-const changes = 147; // Update this if the storage schema is updated
+const changes = 148; // Update this if the storage schema is updated
 
 const readingPagesConfig = {
 	readingConfigName: '',
@@ -54,6 +54,9 @@ const readingPagesConfig = {
 	readingBlankPage: false,
 	readingManga: false,
 	readingWebtoon: false,
+	// Percentage of the reading area a long vertical strip (webtoon/manhwa) is fitted to. Not a
+	// fixed pixel width, so it holds the same apparent size at any display scaling or window size.
+	readingWebtoonFitWidth: 30,
 	readingSoundEffect: {
 		page: {
 			play: false,

@@ -252,6 +252,33 @@ function calcAspectRatio(first, second) {
 	return first;
 }
 
+// A webtoon/manhwa page is a long vertical strip, many times taller than it is wide. Fitting one
+// to the window *height* - which is what a page-shaped scan wants - leaves a sliver a few dozen
+// pixels across that nothing can be read from, and that is why such a chapter previously had to be
+// zoomed in by hand on every open. A strip is only ever read by scrolling, so it gets fitted to
+// width instead. The threshold sits well clear of real page scans (around 0.6-0.75) and of
+// double-page spreads (wider than tall), so nothing page-shaped is caught by it, and it keys off
+// the image's own shape rather than off webtoon mode being switched on - a manhwa whose reading
+// mode was never set (no metadata match, say) is exactly the case that reads worst otherwise.
+const WEBTOON_STRIP_MAX_ASPECT_RATIO = 0.5;
+
+function isWebtoonStrip(aspectRatio) {
+	return readingViewIs('scroll') && aspectRatio > 0 && aspectRatio < WEBTOON_STRIP_MAX_ASPECT_RATIO;
+}
+
+// Webtoon lettering is drawn relative to the strip's own width, so running a strip across the full
+// width of a wide monitor renders its text far bigger than it was drawn to be read at (and upscales
+// it past its own resolution). Capping the strip at a fraction of the reading area is what makes it
+// comfortable without any zooming. A fraction rather than a fixed pixel width, so it holds the same
+// apparent size regardless of display scaling; the floor keeps it sane on a narrow window, where a
+// fraction alone would be thinner than the strip needs.
+function webtoonStripWidth(availableWidth) {
+	const percent = +_config.readingWebtoonFitWidth || 30;
+	const floor = Math.min(availableWidth, 420);
+
+	return Math.min(availableWidth, Math.max(floor, availableWidth * (percent / 100)));
+}
+
 function disposeImages(data = false) {
 	let _margin = readingMargin(data);
 
@@ -482,6 +509,11 @@ function disposeImages(data = false) {
 		else {
 			let imageHeight, imageWidth, marginLeft, marginTop;
 
+			// Declared up here (not just inside the branch that computes it) so the enlarge-cap
+			// check further down - which decides whether to clamp a strip back down to its native
+			// pixel width, undoing the fit-width it was just given - can see it too.
+			let isStrip = false;
+
 			if (_config.readingHorizontalsMarginActive && first.aspectRatio > 1) {
 				if (aspectRatioHorizontals0 > first.aspectRatio && !(readingViewIs('scroll') && (_config.readingViewAdjustToWidth || _config.readingWebtoon))) {
 					imageHeight = (contentHeight - marginVertical * 2);
@@ -497,7 +529,9 @@ function disposeImages(data = false) {
 				}
 			}
 			else {
-				if (aspectRatio0 > first.aspectRatio && !(readingViewIs('scroll') && (_config.readingViewAdjustToWidth || _config.readingWebtoon))) {
+				isStrip = isWebtoonStrip(first.aspectRatio);
+
+				if (aspectRatio0 > first.aspectRatio && !isStrip && !(readingViewIs('scroll') && (_config.readingViewAdjustToWidth || _config.readingWebtoon))) {
 					imageHeight = (contentHeight - marginVertical * 2);
 					imageWidth = imageHeight * first.aspectRatio;
 					marginLeft = contentWidth / 2 - imageWidth / 2;
@@ -505,8 +539,12 @@ function disposeImages(data = false) {
 				}
 				else {
 					imageWidth = (contentWidth - marginHorizontal * 2);
+
+					if (isStrip)
+						imageWidth = webtoonStripWidth(imageWidth);
+
 					imageHeight = imageWidth / first.aspectRatio;
-					marginLeft = marginHorizontal;
+					marginLeft = isStrip ? (contentWidth / 2 - imageWidth / 2) : marginHorizontal;
 					marginTop = contentHeight / 2 - imageHeight / 2;
 				}
 			}
@@ -521,7 +559,13 @@ function disposeImages(data = false) {
 				let size = ai.size(imagesData[first.index]);
 				let originalSize = false;
 
-				if (readingNotEnlargeMoreThanOriginalSize) {
+				// A strip's fit-width is deliberately below its native resolution (see
+				// isWebtoonStrip/webtoonStripWidth above) - to a plain page, "don't enlarge past
+				// original size" means "don't blur it by upscaling", but applied to a strip it means
+				// "clamp the comfortable width straight back to unreadable", undoing the fit for
+				// exactly the pages it matters most for. This setting was never meant to fight that
+				// fit, so it does not apply to a page recognised as a strip.
+				if (readingNotEnlargeMoreThanOriginalSize && !isStrip) {
 					let dpr = window.devicePixelRatio;
 					let sizeClip = ai.size(imagesDataClip[first.index]);
 
@@ -871,7 +915,14 @@ function goToImageCL(index, animation = true, fromScroll = false, fromPageRange 
 			// call always still runs with the latest index, so the queue never falls behind for
 			// longer than the throttle window.
 			app.setThrottle('reading-render-focus-index', function () {
-				render.focusIndex(index, doublePage.active());
+				// AI off for this throttled call: on a PDF, an AI step first has to rasterise
+				// the page to a JPEG on the main thread before the model ever runs on it - a
+				// full second render on top of the one already needed just to show the page.
+				// During a fast continuous scroll that ran on nearly every throttled call, which
+				// is what turned "scroll through a PDF" into the stutter-then-catch-up this
+				// throttle exists to prevent. The settled call below (once scrolling actually
+				// stops for 180ms) always runs render.focusIndex() with AI back on by default.
+				render.focusIndex(index, doublePage.active(), false);
 			}, 60, 160);
 
 			app.setThrottle('reading-filters-focus-index', function () {
@@ -2187,7 +2238,10 @@ function showPreviousComic(mode, animation = true, invert = false) {
 
 var currentScale = 1, scalePrevData = { tranX: 0, tranX2: 0, tranY: 0, tranY2: 0, scale: 1, scrollTop: 0 }, originalRect = false, originalRectReadingBody = false, originalRect2 = false, originalRectReadingBody2 = false, haveZoom = false, currentZoomIndex = false, applyScaleST = false, zoomingIn = false, prevAnime = false;
 
-function applyScale(animation = true, scale = 1, center = false, zoomOut = false, delayed = false) {
+// onSettled fires once the transform has finished settling - that settle step rewrites
+// content.scrollTop itself, so anything that needs the scroll to end up somewhere specific has to
+// run after it rather than before, or it is silently overwritten (see read()).
+function applyScale(animation = true, scale = 1, center = false, zoomOut = false, delayed = false, onSettled = false) {
 	let animationDurationS = ((animation) ? _config.readingViewSpeed : 0);
 
 	if (currentZoomIndex === false) {
@@ -2332,6 +2386,8 @@ function applyScale(animation = true, scale = 1, center = false, zoomOut = false
 				applyScaleST = false;
 				zoomingIn = false;
 
+				if (onSettled) onSettled();
+
 			}, animationDurationS * 1000 + 100);
 		}
 		else {
@@ -2416,6 +2472,8 @@ function applyScale(animation = true, scale = 1, center = false, zoomOut = false
 				applyScaleST = false;
 				zoomingIn = false;
 
+				if (onSettled) onSettled();
+
 			}, animationDurationS * 1000 + 100);
 		}
 
@@ -2439,6 +2497,11 @@ function applyScale(animation = true, scale = 1, center = false, zoomOut = false
 		};
 
 		render.setScale(scale, ((config.readingGlobalZoom && readingViewIs('scroll')) || (config.readingGlobalZoomSlide && !readingViewIs('scroll'))), doublePage.active());
+	}
+	else if (onSettled) {
+		// Already at this scale, so nothing settles - but a caller waiting on the scroll being
+		// final still has to be let go, or it waits forever on a transform that never runs.
+		onSettled();
 	}
 }
 
@@ -2561,6 +2624,17 @@ function resetZoom(animation = true, index = false, apply = true, center = true,
 
 		if (_image && !_image.folder && !_image.blank) {
 			let image = ai.size(imagesData[_image.index]) || [];
+
+			// "original size" means blowing a webtoon strip up to its native pixel width, which for
+			// a long strip is many times wider than the comfortable-reading width it was
+			// deliberately fitted to (see isWebtoonStrip/webtoonStripWidth in disposeImages()) - not
+			// a reset at all from the reader's point of view, just an unwanted jump back to
+			// unreadable every time the reading area is clicked. There is no sensible "original
+			// size" for a strip that isn't meant to be read at its native width in the first place,
+			// so a plain click on one does nothing here rather than fighting the fit it just got.
+			if (image && isWebtoonStrip(image.width / image.height))
+				return;
+
 			let img = template._contentRight().querySelector('.r-img-i' + _image.index + ' oc-img');
 
 			if (img) {
@@ -3901,7 +3975,7 @@ function getReadingPagesConfigPath(fallbackPath = false) {
 	return resolved.fallback || mainPath || '';
 }
 
-const trackedSeriesModeKeys = ['readingView', 'readingManga', 'readingWebtoon', 'readingDoublePage'];
+const trackedSeriesModeKeys = ['readingView', 'readingManga', 'readingWebtoon', 'readingDoublePage', 'readingNotEnlargeMoreThanOriginalSize'];
 
 // Earlier builds of the automatic reading-mode feature stored a copy of the entire reading
 // config per series. Because loadReadingConfig() spreads the stored object over the global
@@ -4032,12 +4106,22 @@ function applyTrackedSeriesReadingDefaults(readingPagesConfigPath = '', storedRe
 		readingPagesConfig.readingManga = true;
 		readingPagesConfig.readingWebtoon = false;
 		readingPagesConfig.readingDoublePage = true;
+		readingPagesConfig.readingNotEnlargeMoreThanOriginalSize = true;
 	}
 	else if (seriesType === 'manhwa' || seriesType === 'manhua') {
 		readingPagesConfig.readingView = 'scroll';
 		readingPagesConfig.readingManga = false;
 		readingPagesConfig.readingWebtoon = true;
 		readingPagesConfig.readingDoublePage = false;
+		// A long vertical strip's comfortable reading width is deliberately below its native
+		// resolution (see isWebtoonStrip/webtoonStripWidth in disposeImages()) - "don't enlarge
+		// past original size" exists to avoid blurring a page by upscaling it, but applied to a
+		// strip it clamps the comfortable width straight back to unreadable, for exactly the
+		// pages it was meant to fix. disposeImages() already skips this per-page for anything
+		// shaped like a strip regardless of this setting, so this is belt-and-suspenders for a
+		// tracked series specifically: it keeps the switch itself reading "off" here too, instead
+		// of showing on while quietly not applying.
+		readingPagesConfig.readingNotEnlargeMoreThanOriginalSize = false;
 	}
 	else {
 		return false;
@@ -6464,8 +6548,20 @@ async function read(path, index = 1, end = false, isCanvas = false, isEbook = fa
 	// that this chapter's pages exist in the DOM. applyScale() only redraws its transform when
 	// the requested scale differs from scalePrevData.scale, which the reset above already left at
 	// 1, so this reliably takes effect instead of being skipped as a no-op.
-	if (keepZoom && keptScale != 1 && !isEbook)
-		applyScale(false, keptScale, true);
+	//
+	// The page is then positioned a second time, once that transform has settled. applyScale's
+	// settle step rewrites content.scrollTop itself, a hundred-odd milliseconds after the fact and
+	// from a scroll offset measured against the *un*transformed layout - so it lands the reader
+	// slightly below the top of a zoomed chapter rather than at it, and by a different amount
+	// depending on how far the previous chapter had been scrolled. Re-running goToIndex() after
+	// the settle puts it on the page it was always meant to open at, against the final geometry.
+	if (keepZoom && keptScale != 1 && !isEbook) {
+		applyScale(false, keptScale, true, false, false, function () {
+
+			if (onReading) goToIndex(newIndex, false, end, end);
+
+		});
+	}
 
 	// Make the current comic eligible for the home continue-reading card immediately.
 	progress.activeSave();

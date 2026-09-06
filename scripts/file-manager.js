@@ -5,6 +5,121 @@ const requestFileAccess = require(p.join(appDir, '.dist/file-manager/request-fil
 var un7z = false, bin7z = false, yauzl = false, fastXmlParser = false, Minimatch = false;
 var activeLogTimers = Object.create(null);
 
+// Size of the slices pdf.js pulls out of a local PDF. This is not a network fetch - each
+// request is one fs.read() on an already-open descriptor - so there is no round-trip latency
+// to amortise, and a smaller slice simply means less of the file is ever resident. Measured
+// against 128KB and 1MB on a 164MB file: the three are within noise of each other on speed,
+// so the smallest useful granularity wins.
+const PDF_RANGE_CHUNK_SIZE = 256 * 1024;
+
+// Quality used when a rasterised PDF page is encoded for display. PNG was measured at 7.2MB
+// and 513ms per page against 1.4MB and 148ms for JPEG at this quality on the same page, and
+// the reader keeps a whole window of these alive at once. WebP was measured too and is not a
+// contender here: Chromium's WebP encoder took 674-869ms per page, worse than PNG.
+const PDF_RENDER_JPEG_QUALITY = 0.92;
+
+// Pages written to disk for the AI pipeline are re-read and re-scaled by it, so they are
+// encoded a little more conservatively than the ones that only have to reach the screen.
+// (The previous value here was 1, which is quality that nothing downstream can perceive
+// bought with several times the file size and encode time.)
+const PDF_EXTRACT_JPEG_QUALITY = 0.95;
+
+var pdfRangeTransportClass = false;
+
+// pdf.js can either be handed a whole PDF as one buffer or be given a transport it can pull
+// byte ranges from on demand. It was previously given a `file:` URL, which its own transport
+// cannot range-request, so every open read the entire file into memory before a single page
+// was shown - a 64MB comic cost 64MB before it drew anything, and a 500MB one cost 500MB even
+// if the reader looked at three pages.
+//
+// A local file does not need a network transport at all. This one answers pdf.js's range
+// requests straight from an open file descriptor, so what ends up resident tracks the pages
+// actually visited rather than the size of the file.
+function getPdfRangeTransportClass() {
+
+	if (pdfRangeTransportClass) return pdfRangeTransportClass;
+
+	pdfRangeTransportClass = class PdfFileRangeTransport extends unpdf.PDFDataRangeTransport {
+
+		constructor(path, size) {
+			// No initial data: pdf.js asks for the ranges it needs (starting with the trailer
+			// and xref) as soon as the transport reports the length, and anything handed over
+			// up front would just be a slice of the file nothing had asked for yet.
+			super(size, new Uint8Array(0), false, null);
+
+			this.filePath = path;
+			this.fileSize = size;
+			this.fd = fs.openSync(path, 'r');
+			this.closed = false;
+			this.pending = 0;
+		}
+
+		requestDataRange(begin, end) {
+
+			if (this.closed) return;
+
+			const start = Math.max(0, begin);
+			const stop = Math.min(this.fileSize, end);
+			const length = Math.max(0, stop - start);
+
+			if (!length) {
+				this.onDataRange(start, new Uint8Array(0));
+				return;
+			}
+
+			const buffer = Buffer.allocUnsafe(length);
+			this.pending++;
+
+			fs.read(this.fd, buffer, 0, length, start, (error, read) => {
+
+				this.pending--;
+
+				// A descriptor number is reused by the OS once it is closed, so a read that
+				// lands after close() could otherwise be answered with bytes from an entirely
+				// different file. close() waits for `pending` to drain for the same reason.
+				if (this.closed) {
+					this.closeWhenIdle();
+					return;
+				}
+
+				if (error) {
+					console.error('PDF range read failed', this.filePath, start, length, error);
+					return;
+				}
+
+				this.onDataRange(start, new Uint8Array(buffer.buffer, buffer.byteOffset, read));
+
+			});
+
+		}
+
+		abort() {
+			this.close();
+		}
+
+		close() {
+			this.closed = true;
+			this.closeWhenIdle();
+		}
+
+		closeWhenIdle() {
+
+			if (!this.closed || this.pending > 0 || this.fd === false) return;
+
+			const fd = this.fd;
+			this.fd = false;
+
+			try { fs.closeSync(fd); }
+			catch (error) { }
+
+		}
+
+	};
+
+	return pdfRangeTransportClass;
+
+}
+
 function startLogTimer(key = '')
 {
 	if(!activeLogTimers[key])
@@ -211,10 +326,8 @@ var file = function (path, _config = false) {
 				compressedOpened[path].compressed.files = false;
 				compressedOpened[path].compressed.partialRead = false;
 				// Also reset the PDF object so it reopens without thumbnail restrictions
-				if (compressedOpened[path].compressed.pdf) {
-					compressedOpened[path].compressed.pdf.destroy();
-					compressedOpened[path].compressed.pdf = null;
-				}
+				if (compressedOpened[path].compressed.pdf)
+					compressedOpened[path].compressed.destroyPdf();
 			}
 		}
 
@@ -268,10 +381,8 @@ var file = function (path, _config = false) {
 			// Also clear any in-memory single-page results and reset PDF object
 			try {
 				compressed.files = false;
-				if (compressed.pdf) {
-					compressed.pdf.destroy();
-					compressed.pdf = null;
-				}
+				if (compressed.pdf)
+					compressed.destroyPdf();
 			}
 			catch (e) { }
 		}
@@ -322,10 +433,8 @@ var file = function (path, _config = false) {
 			compressed.files = false;
 			compressed.partialRead = false;
 
-			if (compressed.pdf) {
-				try { compressed.pdf.destroy(); } catch (e) { }
-				compressed.pdf = null;
-			}
+			if (compressed.pdf)
+				compressed.destroyPdf();
 
 			files = await compressed.read({ ...this.config, forceFullRead: true });
 		}
@@ -2475,6 +2584,8 @@ var fileCompressed = function (path, _realPath = false, forceType = false, prefi
 	// PDF
 	this.pdf = false;
 	this.pdfFastRead = false;
+	this.pdfRangeTransport = false;
+	this.pdfCleanupST = false;
 	// True while `this.files` holds the synthetic thumbnail-only page list from readPdf().
 	this.partialRead = false;
 
@@ -2487,50 +2598,83 @@ var fileCompressed = function (path, _realPath = false, forceType = false, prefi
 		this.macosStartAccessingSecurityScopedResource(this.realPath);
 
 		let pdfOptions = {
-			url: encodeURIComponent(this.realPath).replace(/\%2F/g, '/').replace(/\%5C/g, '\\').replace(/\%3A/g, ':'),
 			wasmUrl: fileManager.posixPath(asarToAsarUnpacked(p.join(appDir, 'node_modules/pdfjs-dist/wasm/'))),
 			cMapUrl: fileManager.posixPath(asarToAsarUnpacked(p.join(appDir, 'node_modules/pdfjs-dist/cmaps/'))),
 			cMapPacked: true,
+
+			// pdf.js decides on its own whether to hand embedded JPEG/JPX images to the
+			// platform's `ImageDecoder` or to run its own decoder written in JavaScript, and
+			// its default answer for anything that looks like Chrome is "use the JavaScript
+			// one". That is the wrong default for this app: every page of a scanned comic is
+			// one big embedded JPEG, so that decision is the whole cost of drawing a page.
+			// Measured over 40 pages of a 1800x2700-per-page file, rasterising went from
+			// 349ms to 46ms per page with this on.
+			//
+			// It is safe to force: pdf.js inspects each image first and declines the fast
+			// path for anything it is not confident about, and the call is wrapped in a
+			// try/catch that falls back to the JavaScript decoder for that image.
+			isImageDecoderSupported: true,
+
+			// Never let pdf.js pull in parts of the file that nothing has asked to look at.
+			disableAutoFetch: true,
+			disableStream: true,
+
+			rangeChunkSize: PDF_RANGE_CHUNK_SIZE,
 		};
 
-		// Local filesystem PDFs can fail in pdf.js with "Unexpected server response (200)"
-		// when range/stream transport is used in Electron. Disable it for file paths.
+		if (this.config.fromThumbnailsGeneration)
+			pdfOptions.disableFontFace = true;
+
+		// Local files are read through a descriptor (see PdfFileRangeTransport). Server-backed
+		// files keep the URL transport, which pdf.js can range-request over HTTP by itself.
+		let transport = false;
+
 		if (!isServer(this.path)) {
-			pdfOptions.disableRange = true;
-			pdfOptions.disableStream = true;
-			pdfOptions.disableAutoFetch = true;
+			try {
+				transport = new (getPdfRangeTransportClass())(this.realPath, fs.statSync(this.realPath).size);
+			}
+			catch (error) {
+				console.error('Could not open PDF for ranged reading, falling back to URL transport', this.realPath, error);
+			}
 		}
 
-		// For thumbnail generation, minimize memory by preventing pdfjs from pre-loading the entire PDF
-		if (this.config.fromThumbnailsGeneration) {
-			pdfOptions.disableAutoFetch = true;
-			pdfOptions.disableStream = true;
-			pdfOptions.disableFontFace = true;
+		if (transport) {
+			pdfOptions.range = transport;
+			this.pdfRangeTransport = transport;
+		}
+		else {
+			pdfOptions.url = encodeURIComponent(this.realPath).replace(/\%2F/g, '/').replace(/\%5C/g, '\\').replace(/\%3A/g, ':');
+
+			// The URL transport cannot serve ranges for a local path (it answers with the whole
+			// file and a 200), so asking it for them only produces an error to recover from.
+			if (!isServer(this.path))
+				pdfOptions.disableRange = true;
 		}
 
 		try {
 			this.pdf = await unpdf.getDocument(pdfOptions).promise;
 		}
 		catch (error) {
-			const responseError = error && error.name === 'ResponseException' && /Unexpected server response \(200\)/i.test(error.message || '');
+			// Last resort for a local file: read the whole thing into memory. This is the
+			// behaviour every PDF used to get unconditionally, kept only as the fallback it
+			// should always have been.
+			if (!isServer(this.path)) {
+				this.closePdfRangeTransport();
 
-			// Fallback to direct file bytes for local files when URL transport fails.
-			if (!isServer(this.path) && responseError) {
 				const buffer = await fsp.readFile(this.realPath);
 				const dataOptions = {
 					data: new Uint8Array(buffer),
 					wasmUrl: pdfOptions.wasmUrl,
 					cMapUrl: pdfOptions.cMapUrl,
 					cMapPacked: true,
+					isImageDecoderSupported: true,
 					disableRange: true,
 					disableStream: true,
 					disableAutoFetch: true,
 				};
 
-				if (this.config.fromThumbnailsGeneration) {
-					dataOptions.disableAutoFetch = true;
+				if (this.config.fromThumbnailsGeneration)
 					dataOptions.disableFontFace = true;
-				}
 
 				this.pdf = await unpdf.getDocument(dataOptions).promise;
 			}
@@ -2543,6 +2687,70 @@ var fileCompressed = function (path, _realPath = false, forceType = false, prefi
 
 	}
 
+	this.closePdfRangeTransport = function () {
+
+		if (!this.pdfRangeTransport) return;
+
+		try { this.pdfRangeTransport.close(); }
+		catch (error) { }
+
+		this.pdfRangeTransport = false;
+
+	}
+
+	// Every place that used to do `pdf.destroy(); pdf = null` by hand, so the descriptor behind
+	// the range transport is released with the document instead of being left open.
+	this.destroyPdf = function () {
+
+		clearTimeout(this.pdfCleanupST);
+		this.pdfCleanupST = false;
+
+		if (this.pdf) {
+			try {
+				// destroy() is async and rejects if the worker behind the document is already
+				// gone - which is exactly the case some of the callers here are recovering
+				// from, so it must not surface as an unhandled rejection.
+				const destroyed = this.pdf.destroy();
+				if (destroyed && destroyed.catch) destroyed.catch(function () { });
+			}
+			catch (error) { }
+		}
+
+		this.pdf = null;
+		this.closePdfRangeTransport();
+
+	}
+
+	// page.cleanup() releases the resources of one page, but pdf.js also keeps caches shared
+	// across the whole document - decoded image streams, fonts - that page-level cleanup does
+	// not touch, and those are what grow as a reading session visits more of a large file.
+	//
+	// Debounced rather than run per page: the reader rasterises a whole window of pages around
+	// the current one in a burst, and clearing the shared caches between two pages of the same
+	// burst just throws away work the next page in it is about to redo.
+	this.schedulePdfCleanup = function () {
+
+		clearTimeout(this.pdfCleanupST);
+
+		this.pdfCleanupST = setTimeout(() => {
+
+			this.pdfCleanupST = false;
+
+			// Rejects while a page is still rendering, which is not a problem - the next
+			// render schedules another one.
+			if (this.pdf) this.pdf.cleanup().catch(function () { });
+
+		}, 400);
+
+	}
+
+	// Whether to size every page from page 1 instead of asking pdf.js for all of them up front.
+	// The thresholds are far below the old 120 pages / 100MB because the exact sizes are worth
+	// very little: pages of a comic are all the same size anyway, and updatePdfPageSizeCache()
+	// corrects any page that turns out not to be as soon as it is rendered. What the full read
+	// costs, on the other hand, is a parse of every page dictionary in the document before the
+	// first page can be shown - and with ranged reading that also means pulling in the part of
+	// the file each of those dictionaries lives in.
 	this.useFastPdfRead = async function (pdf = false) {
 
 		if (this.config.fromThumbnailsGeneration)
@@ -2550,18 +2758,77 @@ var fileCompressed = function (path, _realPath = false, forceType = false, prefi
 
 		pdf = pdf || await this.openPdf();
 
-		if ((pdf?.numPages || 0) >= 120)
+		if ((pdf?.numPages || 0) >= 48)
 			return true;
 
 		if (!isServer(this.path)) {
 			try {
-				if (fs.statSync(this.realPath).size >= 100 * 1024 * 1024)
+				if (fs.statSync(this.realPath).size >= 24 * 1024 * 1024)
 					return true;
 			}
 			catch (error) {}
 		}
 
 		return false;
+
+	}
+
+	// One place where a pdf.js page becomes pixels.
+	//
+	// It draws onto an OffscreenCanvas rather than a detached `<canvas>` element: the element
+	// carries a compositor surface that this drawing never needs (nothing puts it in the
+	// document), and `alpha: false` lets the 2D context skip per-pixel alpha it also never
+	// needs. Measured together, rasterising went from 394ms to 233ms per page before the
+	// decoder change below it, and the GPU process stopped growing with the page window.
+	//
+	// The white fill is not cosmetic. A PDF page is paper: anything it does not paint is white,
+	// not transparent, and an opaque context starts out black.
+	this.rasterizePdfPage = async function (page, viewport, quality = PDF_RENDER_JPEG_QUALITY) {
+
+		const width = Math.max(1, Math.round(viewport.width));
+		const height = Math.max(1, Math.round(viewport.height));
+
+		const offscreen = (typeof OffscreenCanvas !== 'undefined');
+		let canvas = offscreen ? new OffscreenCanvas(width, height) : document.createElement('canvas');
+
+		if (!offscreen) {
+			canvas.width = width;
+			canvas.height = height;
+		}
+
+		let context = canvas.getContext('2d', { alpha: false });
+
+		context.fillStyle = '#ffffff';
+		context.fillRect(0, 0, width, height);
+
+		const release = function () {
+			canvas.width = 0;
+			canvas.height = 0;
+			canvas = null;
+			context = null;
+		};
+
+		try {
+			await page.render({ canvasContext: context, viewport: viewport }).promise;
+		}
+		catch (error) {
+			release();
+			throw error;
+		}
+
+		let blob;
+
+		try {
+			if (offscreen)
+				blob = await canvas.convertToBlob({ type: 'image/jpeg', quality: quality });
+			else
+				blob = await new Promise(function (resolve) { canvas.toBlob(resolve, 'image/jpeg', quality); });
+		}
+		finally {
+			release();
+		}
+
+		return { blob: blob, width: width, height: height };
 
 	}
 
@@ -2657,7 +2924,7 @@ var fileCompressed = function (path, _realPath = false, forceType = false, prefi
 					break;
 				} catch (e) {
 					if (e.message && (e.message.includes('Invalid page request') || e.message.includes('Worker was destroyed') || e.message.includes('Transport destroyed'))) {
-						this.pdf = null;
+						this.destroyPdf();
 						retries--;
 						if (retries === 0) throw e;
 						await new Promise(r => setTimeout(r, 100));
@@ -2700,7 +2967,7 @@ var fileCompressed = function (path, _realPath = false, forceType = false, prefi
 					break;
 				} catch (e) {
 					if (e.message && (e.message.includes('Invalid page request') || e.message.includes('Worker was destroyed') || e.message.includes('Transport destroyed'))) {
-						this.pdf = null;
+						this.destroyPdf();
 						retries--;
 						if (retries === 0) throw e;
 						// Yield to let concurrent destruction resolve gracefully
@@ -2790,7 +3057,7 @@ var fileCompressed = function (path, _realPath = false, forceType = false, prefi
 				break;
 			} catch (e) {
 				if (e.message && (e.message.includes('Invalid page request') || e.message.includes('Worker was destroyed') || e.message.includes('Transport destroyed'))) {
-					this.pdf = null;
+					this.destroyPdf();
 					retries--;
 					if (retries === 0) throw e;
 					await new Promise(r => setTimeout(r, 100));
@@ -2906,7 +3173,7 @@ var fileCompressed = function (path, _realPath = false, forceType = false, prefi
 						break;
 					} catch (e) {
 						if (e.message && (e.message.includes('Invalid page request') || e.message.includes('Worker was destroyed') || e.message.includes('Transport destroyed'))) {
-							this.pdf = null;
+							this.destroyPdf();
 							retries--;
 							if (retries === 0) throw e;
 							await new Promise(r => setTimeout(r, 100));
@@ -2921,23 +3188,16 @@ var fileCompressed = function (path, _realPath = false, forceType = false, prefi
 				let scale = this.config.width / width;
 				let viewport = page.getViewport({ scale: scale });
 
-				let canvas = document.createElement('canvas');
-				canvas.width = viewport.width;
-				canvas.height = viewport.height;
-				let context = canvas.getContext('2d');
+				let rendered;
 
 				try {
-					await page.render({ canvasContext: context, viewport: viewport }).promise;
+					rendered = await this.rasterizePdfPage(page, viewport, PDF_EXTRACT_JPEG_QUALITY);
 				}
 				catch (error) {
 					const isCancelled = error && (error.name === 'RenderingCancelledException' || /Rendering cancelled/i.test(error.message || ''));
 
 					// Cancellation is expected when rapidly switching pages/views; skip silently.
 					if (isCancelled) {
-						canvas.width = 0;
-						canvas.height = 0;
-						canvas = null;
-						context = null;
 						page.cleanup();
 						continue;
 					}
@@ -2945,25 +3205,21 @@ var fileCompressed = function (path, _realPath = false, forceType = false, prefi
 					throw error;
 				}
 
-				let imageData = canvas.toDataURL('image/jpeg', 1);
-
 				try {
-					fs.writeFileSync(path, Buffer.from(imageData.replace(/^data:image\/[a-z]+;base64,/, ''), 'base64'));
+					// Straight from the encoded bytes. This used to go through toDataURL(),
+					// which builds a base64 string of the whole image - a second copy about a
+					// third larger than the JPEG itself - only to decode it right back again.
+					fs.writeFileSync(path, Buffer.from(await rendered.blob.arrayBuffer()));
 				} catch (e) {
 					if (e.code !== 'ENOENT') console.error('Error writing PDF thumbnail:', e);
 				}
+
+				rendered = null;
 
 				// Mark the extracted temp file as in-use so cleanup won't remove it
 				try {
 					fileManager.setTmpUsage(path);
 				} catch (e) { /* best-effort */ }
-
-				// Free canvas and image data immediately to prevent memory accumulation
-				canvas.width = 0;
-				canvas.height = 0;
-				canvas = null;
-				context = null;
-				imageData = null;
 
 				this.setFileStatus(file, { page: i, extracted: true, width: this.config.width });
 
@@ -2971,14 +3227,13 @@ var fileCompressed = function (path, _realPath = false, forceType = false, prefi
 				this.whenExtractFile(virtualPath);
 
 				page.cleanup();
+				this.schedulePdfCleanup();
 			}
 		}
 
 		// Destroy PDF immediately after thumbnail extraction to free memory
-		if (this.config.fromThumbnailsGeneration && this.pdf) {
-			this.pdf.destroy();
-			this.pdf = null;
-		}
+		if (this.config.fromThumbnailsGeneration && this.pdf)
+			this.destroyPdf();
 
 		this.setProgress(1);
 
@@ -3004,7 +3259,7 @@ var fileCompressed = function (path, _realPath = false, forceType = false, prefi
 					break;
 				} catch (e) {
 					if (e.message && (e.message.includes('Invalid page request') || e.message.includes('Worker was destroyed') || e.message.includes('Transport destroyed'))) {
-						this.pdf = null;
+						this.destroyPdf();
 						retries--;
 						if (retries === 0) throw e;
 						await new Promise(r => setTimeout(r, 100));
@@ -3022,30 +3277,16 @@ var fileCompressed = function (path, _realPath = false, forceType = false, prefi
 
 			let scale = this.config.width / originalSize.width;
 			let viewport = page.getViewport({ scale: scale });
-			const renderWidth = Math.max(1, Math.round(viewport.width));
-			const renderHeight = Math.max(1, Math.round(viewport.height));
 
-			let canvas = document.createElement('canvas');
-			canvas.width = viewport.width = renderWidth;
-			canvas.height = viewport.height = renderHeight;
-			let context = canvas.getContext('2d');
-
-			if (this.pdfFastRead) {
-				context.fillStyle = '#ffffff';
-				context.fillRect(0, 0, canvas.width, canvas.height);
-			}
+			let rendered;
 
 			try {
-				await page.render({ canvasContext: context, viewport: viewport }).promise;
+				rendered = await this.rasterizePdfPage(page, viewport);
 			}
 			catch (error) {
 				const isCancelled = error && (error.name === 'RenderingCancelledException' || /Rendering cancelled/i.test(error.message || ''));
 
 				if (isCancelled) {
-					canvas.width = 0;
-					canvas.height = 0;
-					canvas = null;
-					context = null;
 					page.cleanup();
 
 					return false;
@@ -3054,21 +3295,13 @@ var fileCompressed = function (path, _realPath = false, forceType = false, prefi
 				throw error;
 			}
 
-			const blob = await new Promise((resolve) => {
-				if (this.pdfFastRead)
-					canvas.toBlob(resolve, 'image/jpeg', 0.9);
-				else
-					canvas.toBlob(resolve, 'image/png');
-			});
-
-			// Free canvas immediately after blob creation to prevent memory accumulation
-			canvas.width = 0;
-			canvas.height = 0;
-			canvas = null;
-			context = null;
+			const blob = rendered.blob;
+			const renderWidth = rendered.width;
+			const renderHeight = rendered.height;
 
 			const sizeUpdated = this.updatePdfPageSizeCache(file, originalSize);
 			page.cleanup();
+			this.schedulePdfCleanup();
 
 			this.setFileStatus(file, { rendered: true, widthRendered: this.config.width });
 
@@ -3423,7 +3656,7 @@ var fileCompressed = function (path, _realPath = false, forceType = false, prefi
 	this.destroy = function () {
 
 		if (this.tar) this.tar.destroy();
-		if (this.pdf) this.pdf.destroy();
+		if (this.pdf) this.destroyPdf();
 		if (this.epub) this.epub.destroy();
 
 		delete this.zip;
