@@ -261,18 +261,6 @@ function returnThumbnailsImages(images, callback, file = false)
 		// the pool and starved the reader's own decode/extract jobs while browsing.
 		threads.job('cacheMakeAvailable', {useThreads: 0.08, delay: 30}, async function() {
 
-			// "Background" only in the scheduling sense above - the actual work still runs on
-			// this same renderer thread (there is no worker pool here, `threads.job` just paces
-			// how often it runs). For a PDF specifically that work is pdf.js rasterising a page
-			// plus a JPEG encode on this thread (see rasterizePdfPage() in file-manager.js), so
-			// a library scan generating PDF thumbnails while the user is mid-scroll in the
-			// reader competed directly for the same frame budget the reader's own render.focusIndex
-			// throttle exists to protect. These thumbnails are for the library grid, which is not
-			// even visible while reading, so it costs nothing to have them wait. Capped so a job
-			// can never be starved forever by someone leaving a book open indefinitely.
-			for(let waited = 0; waited < 120000 && typeof reading !== 'undefined' && reading.onReading && reading.onReading(); waited += 500)
-				await app.sleep(500);
-
 			await file.makeAvailable(toGenerateThumbnails, function(image) {
 
 				const data = toGenerateThumbnailsData[image.path];

@@ -915,13 +915,8 @@ function goToImageCL(index, animation = true, fromScroll = false, fromPageRange 
 			// call always still runs with the latest index, so the queue never falls behind for
 			// longer than the throttle window.
 			app.setThrottle('reading-render-focus-index', function () {
-				// AI off for this throttled call: on a PDF, an AI step first has to rasterise
-				// the page to a JPEG on the main thread before the model ever runs on it - a
-				// full second render on top of the one already needed just to show the page.
-				// During a fast continuous scroll that ran on nearly every throttled call, which
-				// is what turned "scroll through a PDF" into the stutter-then-catch-up this
-				// throttle exists to prevent. The settled call below (once scrolling actually
-				// stops for 180ms) always runs render.focusIndex() with AI back on by default.
+				// AI off for this throttled call - see the comment on the non-rapid branch below
+				// for why, and render.js's aiSettleST for where it gets applied instead.
 				render.focusIndex(index, doublePage.active(), false);
 			}, 60, 160);
 
@@ -934,7 +929,18 @@ function goToImageCL(index, animation = true, fromScroll = false, fromPageRange 
 			}, 120, 280);
 		}
 		else {
-			render.focusIndex(index, doublePage.active());
+			// AI off here too whenever this update came from scrolling (fast or slow), not just
+			// during a rapid run of turns. `rapidTurn` only tells apart "turning pages back to
+			// back" from a single call - it says nothing about *why* the index changed. A scroll
+			// crosses a page boundary as a side effect of moving toward wherever the reader is
+			// actually headed, at whatever speed they happen to be scrolling at that moment, not
+			// because they stopped to look at each page it passes - so treating a slow scroll's
+			// index updates as "the reader wants this page, do the expensive AI pass now" ran a
+			// full extract-and-model-inference pass on every single page a slow scroll crossed,
+			// which is exactly backwards from what rapidTurn's fast-scroll throttle above was
+			// trying to prevent. render.js's aiSettleST applies AI once the index has actually
+			// stayed put for a while, regardless of how it got there.
+			render.focusIndex(index, doublePage.active(), !fromScroll);
 			filters.focusIndex(index);
 			music.focusIndex(index);
 		}

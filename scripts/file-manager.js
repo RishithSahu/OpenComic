@@ -2740,6 +2740,13 @@ var fileCompressed = function (path, _realPath = false, forceType = false, prefi
 			// render schedules another one.
 			if (this.pdf) this.pdf.cleanup().catch(function () { });
 
+			// The render worker's document accumulates the same per-document caches independently
+			// of `this.pdf` above (see renderPdfPageOffThread) and needs the same bound.
+			if (this.pdfRenderWorker && this.pdfRenderWorkerReady) {
+				try { this.pdfRenderWorker.postMessage({ cmd: 'cleanup' }); }
+				catch (error) { }
+			}
+
 		}, 400);
 
 	}
@@ -2829,6 +2836,248 @@ var fileCompressed = function (path, _realPath = false, forceType = false, prefi
 		}
 
 		return { blob: blob, width: width, height: height };
+
+	}
+
+	// pdf.js's page.render() (inside rasterizePdfPage above) runs its operator loop - the actual
+	// per-page cost, tens to hundreds of ms for a busy page - as ordinary JS on whichever thread
+	// calls it. Called from here, that thread is the renderer's main thread, the same one
+	// driving the reader's own scroll: every page rasterised competes directly with keeping the
+	// page moving smoothly, which is what turned "scroll through a PDF" into a stutter. Moving
+	// the render onto a dedicated worker (scripts/worker/pdf-render.js) does not make a page
+	// render any faster - it is the same pdf.js doing the same work - it only moves that work off
+	// the thread the reader needs to stay responsive.
+	//
+	// The worker keeps its own pdf.js document open for this file for as long as this object is
+	// rendering pages, entirely separate from `this.pdf` above (which stays exactly as it was,
+	// used for the page list, metadata and page sizing - none of that is expensive enough to be
+	// worth moving). A second, small cost of opening the same file twice, worth it for not having
+	// to touch any of that already-working code path.
+	this.pdfRenderWorker = false;
+	this.pdfRenderWorkerReady = false;
+	this.pdfRenderWorkerOpening = false;
+	this.pdfRenderWorkerOpenReject = false;
+	this.pdfRenderWorkerRequests = null;
+	this.pdfRenderWorkerRequestId = 0;
+
+	// The reader fires off several page renders together to prefetch a scroll/turn window (see
+	// setRenderQueue() in render.js), so this is always called concurrently, not one call at a
+	// time. Without `pdfRenderWorkerOpening` caching the in-flight open, every one of those
+	// concurrent calls would see no ready worker yet and independently open the *same* file -
+	// each with its own file descriptor and its own pdf.js document, all but one leaked the
+	// moment the last one wins the race to overwrite the worker's single `doc`. Every concurrent
+	// caller now awaits that one shared promise instead.
+	this.getPdfRenderWorker = async function () {
+
+		if (this.pdfRenderWorkerReady) return this.pdfRenderWorker;
+
+		if (this.pdfRenderWorkerOpening) {
+			await this.pdfRenderWorkerOpening;
+			return this.pdfRenderWorker;
+		}
+
+		if (!this.pdfRenderWorker) {
+
+			this.pdfRenderWorkerRequests = new Map();
+
+			const worker = new Worker(p.join(appDir, '.dist/worker/pdf-render.js'));
+
+			worker.addEventListener('message', (message) => {
+
+				const data = message.data;
+
+				if (data.cmd === 'rendered') {
+					const pending = this.pdfRenderWorkerRequests.get(data.id);
+					if (!pending) return;
+
+					this.pdfRenderWorkerRequests.delete(data.id);
+
+					if (data.ok) pending.resolve(data);
+					else {
+						// The reconstructed Error's own .stack (captured right here) only ever points at
+						// this listener, not at wherever the failure actually happened inside the worker -
+						// the worker's real stack is logged separately so a failure here is diagnosable
+						// instead of always looking like it came from this line.
+						if (data.errorStack) console.error('PDF render worker error (original stack):\n' + data.errorStack);
+						pending.reject(Object.assign(new Error(data.error || 'PDF render worker failed'), { name: data.errorName || 'Error' }));
+					}
+				}
+
+			});
+
+			worker.addEventListener('error', (error) => {
+
+				// A worker-level error (as opposed to a per-render error posted above) means the
+				// worker itself is gone - fail every render still waiting on it so callers fall
+				// back rather than hang, and let the next render call start a fresh worker.
+				for (const pending of this.pdfRenderWorkerRequests.values())
+					pending.reject(new Error('PDF render worker crashed: ' + (error?.message || error)));
+
+				this.pdfRenderWorkerRequests.clear();
+
+				if (this.pdfRenderWorkerOpenReject)
+					this.pdfRenderWorkerOpenReject(new Error('PDF render worker crashed while opening'));
+
+				this.pdfRenderWorker = false;
+				this.pdfRenderWorkerReady = false;
+
+			});
+
+			this.pdfRenderWorker = worker;
+		}
+
+		// The specific worker this open is for, so the check after awaiting below can tell a
+		// real success apart from a stale response arriving after destroyPdfRenderWorker() (or
+		// the error handler above) already moved this object on to a different worker or none.
+		const worker = this.pdfRenderWorker;
+
+		// Assigned synchronously, with nothing awaited above it since the worker was (re)created -
+		// any concurrent call that reaches the top of this function after this line, even later
+		// in the same microtask turn, is guaranteed to see it already set.
+		this.pdfRenderWorkerOpening = new Promise((resolve, reject) => {
+
+			// A worker that fails cleanly (throws, fails to load) already rejects via the
+			// 'error' listener above or the ok:false reply below. This covers the other case -
+			// the worker (or the process behind it) is not responding at all - so opening a PDF
+			// can never again hang the reader indefinitely no matter what goes wrong here.
+			const timeoutST = setTimeout(() => {
+				worker.removeEventListener('message', onMessage);
+				reject(new Error('PDF render worker did not respond to open within 10s'));
+			}, 10000);
+
+			this.pdfRenderWorkerOpenReject = (error) => { clearTimeout(timeoutST); reject(error); };
+
+			const onMessage = (message) => {
+				if (message.data?.cmd !== 'opened') return;
+				clearTimeout(timeoutST);
+				worker.removeEventListener('message', onMessage);
+				if (message.data.ok) resolve();
+				else reject(new Error(message.data.error || 'PDF render worker failed to open file'));
+			};
+
+			worker.addEventListener('message', onMessage);
+			worker.postMessage({ cmd: 'open', filePath: this.realPath });
+
+		});
+
+		try {
+			await this.pdfRenderWorkerOpening;
+			if (this.pdfRenderWorker === worker) this.pdfRenderWorkerReady = true;
+		}
+		finally {
+			this.pdfRenderWorkerOpening = false;
+			this.pdfRenderWorkerOpenReject = false;
+		}
+
+		return this.pdfRenderWorker;
+
+	}
+
+	this.destroyPdfRenderWorker = function () {
+
+		if (!this.pdfRenderWorker) return;
+
+		try { this.pdfRenderWorker.postMessage({ cmd: 'destroy' }); }
+		catch (error) { }
+
+		if (this.pdfRenderWorkerRequests) {
+			for (const pending of this.pdfRenderWorkerRequests.values())
+				pending.reject(new Error('PDF render worker destroyed'));
+			this.pdfRenderWorkerRequests.clear();
+		}
+
+		// Wakes anything still awaiting getPdfRenderWorker() rather than leaving it to hang on a
+		// worker that has just been told to close and may never answer its 'open' message.
+		if (this.pdfRenderWorkerOpenReject)
+			this.pdfRenderWorkerOpenReject(new Error('PDF render worker destroyed while opening'));
+
+		this.pdfRenderWorker = false;
+		this.pdfRenderWorkerReady = false;
+
+	}
+
+	// Renders one page the same way rasterizePdfPage() does, but on the dedicated worker above
+	// instead of this thread. `scale` is exactly what a caller would have passed into
+	// `page.getViewport({scale})` themselves - the worker fetches its own page object and takes
+	// the viewport from there, so nothing about a page's size ever needs to cross the
+	// worker boundary. Falls back to the main-thread renderer (unchanged, still fully working)
+	// if the worker cannot be reached, so a worker-only failure degrades reading a PDF back to
+	// how it always worked rather than breaking it.
+	this.renderPdfPageOffThread = async function (pageNumber, scale, quality = PDF_RENDER_JPEG_QUALITY) {
+
+		let worker;
+
+		try {
+			worker = await this.getPdfRenderWorker();
+		}
+		catch (error) {
+			// The worker could not be reached at all - it is not going to serve any other
+			// in-flight request either, so there is nothing to preserve by keeping it around.
+			console.error('PDF render worker unavailable, rendering on the main thread instead', error);
+			this.destroyPdfRenderWorker();
+			return this.rasterizePdfPageMainThread(pageNumber, scale, quality);
+		}
+
+		try {
+			const id = ++this.pdfRenderWorkerRequestId;
+
+			const data = await new Promise((resolve, reject) => {
+
+				// Same reasoning as the timeout in getPdfRenderWorker(): a page that never comes
+				// back from the worker at all (as opposed to coming back with an error, which
+				// already rejects normally) must still eventually fall back rather than leave
+				// the reader waiting on this page forever.
+				const timeoutST = setTimeout(() => {
+					this.pdfRenderWorkerRequests.delete(id);
+					reject(new Error('PDF render worker did not respond to page ' + pageNumber + ' within 15s'));
+				}, 15000);
+
+				this.pdfRenderWorkerRequests.set(id, {
+					resolve: (value) => { clearTimeout(timeoutST); resolve(value); },
+					reject: (error) => { clearTimeout(timeoutST); reject(error); },
+				});
+
+				worker.postMessage({ cmd: 'render', id, pageNumber, scale, quality });
+
+			});
+
+			return {
+				blob: new Blob([data.buffer], { type: 'image/jpeg' }),
+				width: data.width,
+				height: data.height,
+			};
+		}
+		catch (error) {
+
+			const isCancelled = error && (error.name === 'RenderingCancelledException' || /Rendering cancelled/i.test(error.message || ''));
+			if (isCancelled) throw error;
+
+			// A single page failing to render - or the worker crashing mid-request, which the
+			// 'error' listener in getPdfRenderWorker() already reacts to on its own by rejecting
+			// every pending request and resetting the worker - does not mean every OTHER page
+			// currently rendering on this same worker has to be abandoned too. Only this one page
+			// falls back; the worker (if still alive) keeps serving the rest.
+			console.error('PDF page render failed on worker, rendering this page on the main thread instead', error);
+			return this.rasterizePdfPageMainThread(pageNumber, scale, quality);
+
+		}
+
+	}
+
+	// Shared fallback for renderPdfPageOffThread(): fetches the page and rasterises it on this
+	// thread exactly as every PDF page was rendered before the worker above existed.
+	this.rasterizePdfPageMainThread = async function (pageNumber, scale, quality) {
+
+		let pdf = await this.openPdf();
+		let page = await pdf.getPage(pageNumber);
+
+		try {
+			const viewport = page.getViewport({ scale });
+			return await this.rasterizePdfPage(page, viewport, quality);
+		}
+		finally {
+			page.cleanup();
+		}
 
 	}
 
@@ -3186,12 +3435,11 @@ var fileCompressed = function (path, _realPath = false, forceType = false, prefi
 				let width = (status?.size?.width || page.getViewport({ scale: 1 }).width);
 
 				let scale = this.config.width / width;
-				let viewport = page.getViewport({ scale: scale });
 
 				let rendered;
 
 				try {
-					rendered = await this.rasterizePdfPage(page, viewport, PDF_EXTRACT_JPEG_QUALITY);
+					rendered = await this.renderPdfPageOffThread(i, scale, PDF_EXTRACT_JPEG_QUALITY);
 				}
 				catch (error) {
 					const isCancelled = error && (error.name === 'RenderingCancelledException' || /Rendering cancelled/i.test(error.message || ''));
@@ -3276,12 +3524,11 @@ var fileCompressed = function (path, _realPath = false, forceType = false, prefi
 			};
 
 			let scale = this.config.width / originalSize.width;
-			let viewport = page.getViewport({ scale: scale });
 
 			let rendered;
 
 			try {
-				rendered = await this.rasterizePdfPage(page, viewport);
+				rendered = await this.renderPdfPageOffThread(status.page, scale);
 			}
 			catch (error) {
 				const isCancelled = error && (error.name === 'RenderingCancelledException' || /Rendering cancelled/i.test(error.message || ''));
@@ -3657,6 +3904,7 @@ var fileCompressed = function (path, _realPath = false, forceType = false, prefi
 
 		if (this.tar) this.tar.destroy();
 		if (this.pdf) this.destroyPdf();
+		this.destroyPdfRenderWorker();
 		if (this.epub) this.epub.destroy();
 
 		delete this.zip;

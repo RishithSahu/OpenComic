@@ -175,6 +175,16 @@ function setMagnifyingGlassStatus(active = false, doublePage = false)
 }
 
 var sendToQueueST = false;
+var aiSettleST = false;
+
+// AI reprocessing (extracting a full-resolution copy of the page and running a native model on
+// it) is real, uncached work paid again on every page it runs for - too slow to also gate by the
+// same 180ms used to widen the prefetch window below. That 180ms only means "not turning pages
+// back to back"; it does not mean "stopped to read this one". Momentum/inertial scrolling and
+// even plain wheel input both coast through gaps well past 180ms while still genuinely
+// scrolling, and re-running AI on whichever page a scroll happened to be crossing during one of
+// those gaps is what turned "scroll smoothly" into "smooth, then stutter, then smooth again".
+const AI_SETTLE_DELAY_MS = 600;
 
 // Rasterising a page costs, in both time and memory, the square of this number - and so does
 // every bitmap decoded from the result and held in the blob cache. 2600 still covers a
@@ -483,6 +493,7 @@ async function focusIndex(index, _doublePage = false, runAi = true)
 	if(!file && !renderImages) return;
 
 	clearTimeout(sendToQueueST);
+	clearTimeout(aiSettleST);
 
 	currentIndex = index;
 	doublePage = !!_doublePage;
@@ -513,22 +524,35 @@ async function focusIndex(index, _doublePage = false, runAi = true)
 	const limits = getQueueLimits();
 	const prioritizeNext = getPrioritizeNextWindow(_doublePage);
 
-	// `runAi` is false only for the throttled call made during a rapid run of page turns (see
-	// the caller in reading.js). For a PDF page that matters far more than for any other format:
-	// unlike a CBZ image, which already sits decoded on disk, an AI step here first has to
-	// rasterise the PDF page to a JPEG on the main thread (see rasterizePdfPage()) before the AI
-	// model ever sees it - a second full render on top of the one already needed just to show
-	// the page. Skipping it here does not lose the AI pass permanently: the settled call below,
-	// 180ms after scrolling actually stops, always runs with AI back on.
+	// `runAi` is false for a rapid run of page turns and for any scroll-driven index update, fast
+	// or slow (see the caller in reading.js) - i.e. whenever this call cannot be trusted to mean
+	// "the reader wants this specific page now". For a PDF page that matters far more than for
+	// any other format: unlike a CBZ image, which already sits decoded on disk, an AI step here
+	// first has to rasterise the PDF page to a JPEG (see extractPdf()) before the AI model ever
+	// sees it - a second full render on top of the one already needed just to show the page.
+	// Skipping it here does not lose the AI pass permanently: aiSettleST below applies it once
+	// the page has actually been the target for a while, not just whenever the queue widens.
 	setRenderQueue(immediateQueue.prev, immediateQueue.next, false, false, prioritizeNext, runAi);
 
 	sendToQueueST = setTimeout(function(){
 
-		setRenderQueue(limits.prev, limits.next, false, false, prioritizeNext);
+		// AI stays off here even though this already fires well after the immediate call above -
+		// see AI_SETTLE_DELAY_MS and aiSettleST below for why 180ms is not long enough to mean
+		// AI should run. This only widens which pages get prefetched.
+		setRenderQueue(limits.prev, limits.next, false, false, prioritizeNext, false);
 
 		if(scaleMagnifyingGlass) setRenderQueue(doublePage ? 3 : 2, doublePage ? 4 : 2, false, true);
 
 	}, 180);
+
+	if(!runAi)
+	{
+		aiSettleST = setTimeout(function(){
+
+			setRenderQueue(immediateQueue.prev, immediateQueue.next, false, false, prioritizeNext, true);
+
+		}, AI_SETTLE_DELAY_MS);
+	}
 }
 
 function revokeAllObjectURL()
