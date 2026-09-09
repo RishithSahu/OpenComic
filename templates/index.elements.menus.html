@@ -122,6 +122,13 @@
           <i class="material-icon menu-simple-icon-first">view_list</i
           >{{language.global.view.list}}
         </div>
+        <div
+          class="menu-simple-element menu-simple-element-little view-coverflow gamepad-item{{#compare page.view '==' 'coverflow'}} s{{/compare}}"
+          onclick="dom.changeView('coverflow', '{{page.name}}');"
+        >
+          <i class="material-icon menu-simple-icon-first">view_carousel</i
+          >{{language.global.view.coverflow}}
+        </div>
 
         <div
           class="simple-slider gamepad-item view-module-size {{#compare page.view '==' 'list'}} disable-pointer{{/compare}}"
@@ -366,6 +373,13 @@
         >
           <i class="material-icon menu-simple-icon-first">label</i>
           <span>{{language.global.labels}}</span>
+        </div>
+
+        <div
+          class="menu-simple-element menu-simple-element-little context-menu-hide-continue-reading gamepad-item"
+        >
+          <i class="material-icon menu-simple-icon-first">visibility_off</i>
+          <span>{{language.global.contextMenu.hideFromContinueReading}}</span>
         </div>
 
         <!--<div class="menu-simple-separator separator-labels"></div>-->

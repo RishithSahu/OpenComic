@@ -30,6 +30,7 @@
 			"main": "View",
 			"module": "Grid",
 			"list": "List",
+			"coverflow": "Cover flow",
 			"moduleSize": "Grid size",
 			"fadeCompleted": "Fade completed",
 			"progressBar": "Show progress bar",

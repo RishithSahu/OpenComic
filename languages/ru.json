@@ -30,6 +30,7 @@
 			"main": "Вид",
 			"module": "Сетка",
 			"list": "Список",
+			"coverflow": "",
 			"moduleSize": "Размер сетки",
 			"fadeCompleted": "Затемнять прочитанное",
 			"progressBar": "Показывать полосу прогресса",

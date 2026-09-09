@@ -30,6 +30,7 @@
 			"main": "Вигляд",
 			"module": "Сітка",
 			"list": "Список",
+			"coverflow": "",
 			"moduleSize": "Розмір сітки",
 			"fadeCompleted": "Затемнення завершених",
 			"progressBar": "Показати індикатор прогресу",

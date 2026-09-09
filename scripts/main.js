@@ -159,6 +159,11 @@ function createWindow(options = {}) {
 			spellcheck: false,
 			v8CacheOptions: 'bypassHeatCheck',
 			additionalArguments: options.args ?? [],
+			// Electron's default UA advertises itself ("OpenComic/x.y.z Electron/x.y.z"), which is
+			// exactly what AniList's Cloudflare front is known to bot-block outright - independent
+			// of actually hitting their rate limit. `fetch()` cannot override this per-request (User-
+			// Agent is a forbidden header name in a renderer), so it has to be set for the window.
+			userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
 		},
 		titleBarStyle: (process.platform == 'linux' && !configInit.forceLinuxHiddenTitleBar) ? 'native' : 'hidden',
 		titleBarOverlay: {
@@ -416,6 +421,13 @@ app.on('open-file', function (event, path) {
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.on('ready', () => {
+
+	// Belt-and-suspenders alongside the BrowserWindow's own webPreferences.userAgent
+	// (createWindow(), above): this covers any request this app makes outside that specific
+	// window's own webContents (a background/offscreen window, a session partition other than
+	// the main window's) that would otherwise still send Electron's default, AniList-Cloudflare-
+	// blocked User-Agent.
+	app.userAgentFallback = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36';
 
 	createWindow();
 

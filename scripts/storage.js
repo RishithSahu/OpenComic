@@ -185,6 +185,10 @@ const storageDefault = {
 				progressPercent: false,
 			}
 		},
+		// Per-folder view override (dom.js changeView()/setCurrentPageVars()) - keyed by folder
+		// path, so switching one series to Cover flow does not carry over to the next, unrelated
+		// folder browsed into. Falls back to `view` when a folder has no entry of its own.
+		folderView: {},
 		recentlyOpenedItems: 100,
 		showFullPathLibrary: false,
 		showFullPathOpened: false,

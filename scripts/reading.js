@@ -4024,9 +4024,14 @@ function hasCustomTrackedSeriesMode(storedReadingPagesConfig = false) {
 
 	// A config this feature wrote itself is not a user customization, so the defaults can still
 	// be refreshed when the AniList metadata only arrives after the file was opened. The marker
-	// is cleared by updateReadingPagesConfig() as soon as the user changes a mode by hand.
-	if (storedReadingPagesConfig.trackedSeriesType)
-		return false;
+	// is cleared by updateReadingPagesConfig() as soon as the user changes a mode by hand - to an
+	// explicit empty string, not by deleting the key, specifically so that clearing can be told
+	// apart here from the key never having existed (an entry from before this marker existed,
+	// which still needs the per-key fallback below). Without that distinction, a user's manual
+	// pick that happened to match the global default made every per-key comparison pass, this
+	// function reported "not customized", and the next metadata refresh silently overwrote it.
+	if ('trackedSeriesType' in storedReadingPagesConfig)
+		return !!storedReadingPagesConfig.trackedSeriesType ? false : true;
 
 	for (let i = 0, len = trackedSeriesModeKeys.length; i < len; i++) {
 		const key = trackedSeriesModeKeys[i];

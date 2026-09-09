@@ -30,6 +30,7 @@
 			"main": "Hiển thị",
 			"module": "Lưới",
 			"list": "Danh sách",
+			"coverflow": "",
 			"moduleSize": "",
 			"fadeCompleted": "",
 			"progressBar": "",

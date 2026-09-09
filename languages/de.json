@@ -30,6 +30,7 @@
 			"main": "Ansicht",
 			"module": "Raster",
 			"list": "Liste",
+			"coverflow": "",
 			"moduleSize": "Rastergröße",
 			"fadeCompleted": "Abgeschlossene ausblenden",
 			"progressBar": "Fortschrittsbalken anzeigen",

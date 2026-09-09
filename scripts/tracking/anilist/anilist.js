@@ -79,6 +79,24 @@ async function _graphQLFetch(body, headers = {}, retries = 3, signal = null)
 			return fetch('https://graphql.anilist.co', options);
 		});
 
+		if(response && response.status === 403)
+		{
+			// A bare 403 with no Retry-After is Cloudflare's bot-management gate, not AniList's
+			// own documented rate limit - and, in every case observed against this session's own
+			// requests, one that does not clear within the couple of minutes an in-place retry
+			// ladder would spend waiting it out. Retrying here anyway meant every single scrape
+			// attempt paid up to a minute of backoff before scrapeFolderMetadata() (tracking.js)
+			// could fall through to its MyAnimeList backup - stacked across every folder in a
+			// large, newly-scraped category, that reads as nothing ever finishing at all. Fail
+			// this one attempt immediately instead; the shared queue pacing below
+			// (_rateLimitedUntil) still keeps subsequent calls from bursting on top of it.
+			const headerRetryMs = _retryAfterToMs(response.headers?.get('retry-after'));
+			const retryMs = _clampInteger(Math.max(headerRetryMs, 60000), 60000, _maxRetryAfterMs);
+			_rateLimitedUntil = Math.max(_rateLimitedUntil, Date.now() + retryMs);
+
+			return response;
+		}
+
 		if(response && response.status === 429)
 		{
 			const headerRetryMs = _retryAfterToMs(response.headers?.get('retry-after'));

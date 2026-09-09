@@ -436,23 +436,22 @@ function buildIndexedBoxCandidates(comics = [])
 		// since Recents has no such dependency. Real reading progress is an unambiguous signal on
 		// its own that this is a real series folder, metadata match or not.
 		//
-		// progress.save() also writes an entry for every *ancestor* of the folder actually being
-		// read (mainPath, and separately its own parent when nested deeper) so that folder's own
-		// progress rolls up too, which let a category container that merely contains a
-		// recently-read series (e.g. "3 Reading") leak into Continue reading as if it were the
-		// series itself. `pages` alone cannot tell the two apart: progress.save() zeroes it on any
-		// entry flagged `isParent` (see there), but that flag comes from `reading.currentComics()`
-		// containing folder-like siblings - which is also true of a perfectly real series whose
-		// chapters are themselves archives/PDFs, i.e. most real series, so it zeroes the genuine
-		// entry just as often as an ancestor's. What actually differs is *where* the file that was
-		// read sits: for a real series/leaf folder it was read directly inside it, so the saved
-		// entry's own file path has this exact folder as its immediate parent; for an ancestor
-		// container the file that was read sits one or more folders deeper still.
+		// progress.save() writes an entry at every folder between the file actually read and
+		// dom.history.mainPath (see reading/progress.js), not just the series folder - so a
+		// category container that merely holds a recently-read series (e.g. "3 Reading") gets an
+		// entry too, purely because mainPath was stuck at it for a library organised deeper than
+		// category/series. `pages` alone cannot tell the two apart: progress.save() zeroes it on
+		// any entry flagged `isParent`, but that is also true of a perfectly real series whose
+		// chapters are themselves archives/PDFs. What does tell them apart is the entry's own
+		// `role` tag (see reading/progress.js and isGenuineSeriesProgress() above) - fixed at the
+		// moment it was written, so it stays reliable even once whichever entry it once shared a
+		// read with has long since been overwritten by something else.
 		const normalizedPath = p.normalize(comic.path || '');
 		const hasDirectMetadata = !!(trackingFolderMetadata[normalizedPath] || trackingFolderMetadata[comic.path]);
 		const progressForPath = readingProgress[comic.path] || readingProgress[normalizedPath];
-		const readFileParent = progressForPath?.path ? p.normalize(p.dirname(progressForPath.path)) : '';
-		const hasReadingProgress = +(progressForPath?.lastReading || 0) > 0 && readFileParent === normalizedPath;
+		const hasReadingProgress = !!progressForPath?.path
+			&& fileManager.isParentPath(normalizedPath, progressForPath.path)
+			&& isGenuineSeriesProgress(normalizedPath, progressForPath, readingProgress);
 
 		if(hasDirectMetadata || hasReadingProgress)
 		{
@@ -515,6 +514,57 @@ function getCandidateStat(path = '')
 		candidateStatCache.delete(candidateStatCache.keys().next().value);
 
 	return stat;
+}
+
+// progress.save() writes the same read at up to three readingProgress keys (see
+// reading/progress.js) and tags each with which of the three it is: 'series' for the folder in
+// between mainPath and a chapter (present only when a library is organised deeper than plain
+// category/series), 'chapter' for the read file's immediate parent, and 'mainPath' for
+// dom.history.mainPath itself. Earlier this compared *entries* to spot the pattern instead of
+// trusting that tag, by grouping keys that shared an exact (path, lastReading) signature - but
+// entries at different keys are NOT overwritten together: mainPath and the series folder get
+// overwritten by every subsequent read anywhere in the same series, while a chapter's own key
+// is unique to it and never touched again once you move on from it. A chapter read weeks ago,
+// once its one-time group-mates have since been overwritten by a more recent read, becomes a
+// permanent, ordinary-looking lone entry - which is exactly how individual chapter files ended
+// up in Continue reading. `role` does not have this problem: it is fixed at the moment an entry
+// is written and never needs another entry to still exist to mean anything.
+//
+// A 'mainPath'-tagged entry is genuine series evidence only if nothing more specific (a
+// 'series' or 'chapter' tagged entry somewhere inside it) was *ever* recorded under it - that
+// still being true is what tells apart a flat two-level library (mainPath already is the
+// series, nothing deeper ever gets tagged) from mainPath having been a category all along.
+function isGenuineSeriesProgress(normalizedPath, entry, readingProgress)
+{
+	if(!entry || +(entry.lastReading || 0) <= 0)
+		return false;
+
+	if(entry.role === 'series')
+		return true;
+
+	if(entry.role === 'chapter')
+		return false;
+
+	// role === 'mainPath', or absent on an entry written before this tag existed.
+	const key = normalizedPath.toLowerCase();
+
+	for(const otherKey in readingProgress)
+	{
+		const other = readingProgress[otherKey];
+
+		if(!other || (other.role !== 'series' && other.role !== 'chapter'))
+			continue;
+
+		const normalizedOtherKey = p.normalize(otherKey);
+
+		if(normalizedOtherKey.toLowerCase() === key)
+			continue;
+
+		if(fileManager.isParentPath(normalizedPath, normalizedOtherKey))
+			return false;
+	}
+
+	return true;
 }
 
 // A single library render calls this four times (continue reading, recently added,
@@ -590,6 +640,45 @@ function _buildRecommendationCandidates(comics = [], trackingFolderMetadata = {}
 			path: path,
 			mainPath: path,
 			added: added,
+			folder: true,
+			compressed: compatible.compressed(path),
+			fromMasterFolder: true,
+		});
+	}
+
+	// A series with genuine reading progress but no AniList match (an obscure title, a fan
+	// translation, a typo'd folder name) is invisible above: it is not on trackingFolderMetadata,
+	// and it only appears in `comics` at all when the page currently being rendered happens to be
+	// its own parent folder - never from the library root, several folders up. progress.save()
+	// now leaves a 'series'-tagged entry at the actual series folder regardless of nesting depth
+	// (see reading/progress.js), so add it here the same way a tracking match is added above -
+	// only ever from a 'series'-tagged entry, never a 'chapter' or plain 'mainPath' one, so an
+	// individual chapter file can never surface as its own card here.
+	const readingProgress = relative.get('readingProgress') || {};
+
+	for(const progressPath in readingProgress)
+	{
+		if(readingProgress[progressPath]?.role !== 'series' || +(readingProgress[progressPath]?.lastReading || 0) <= 0)
+			continue;
+
+		const path = p.normalize(progressPath);
+		const key = String(path).toLowerCase();
+
+		if(indexedPaths[key])
+			continue;
+
+		const stat = getCandidateStat(path);
+
+		if(!stat.exists)
+			continue;
+
+		indexedPaths[key] = true;
+
+		candidates.push({
+			name: p.basename(path),
+			path: path,
+			mainPath: path,
+			added: stat.added,
 			folder: true,
 			compressed: compatible.compressed(path),
 			fromMasterFolder: true,

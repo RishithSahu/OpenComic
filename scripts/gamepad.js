@@ -737,7 +737,9 @@ function showMenu()
 		let viewIcon = document.querySelector('.menu-gamepad-view-icon');
 		if(!viewIcon) return;
 
-		viewIcon.innerHTML = (handlebarsContext.page.view == 'module') ? 'view_module' : 'view_list';
+		const view = handlebarsContext.page.view;
+
+		viewIcon.innerHTML = (view == 'module') ? 'view_module' : ((view == 'coverflow') ? 'view_carousel' : 'view_list');
 	}
 }
 

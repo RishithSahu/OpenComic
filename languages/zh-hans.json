@@ -30,6 +30,7 @@
 			"main": "视图",
 			"module": "网格",
 			"list": "列表",
+			"coverflow": "",
 			"moduleSize": "网格大小",
 			"fadeCompleted": "淡入淡出完成",
 			"progressBar": "显示进度条",

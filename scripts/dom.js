@@ -8,6 +8,7 @@ const domPoster = require(p.join(appDir, '.dist/dom/poster.js')),
 	header = require(p.join(appDir, '.dist/dom/header.js')),
 	boxes = require(p.join(appDir, '.dist/dom/boxes.js')),
 	history = require(p.join(appDir, '.dist/dom/history.js')),
+	coverflow = require(p.join(appDir, '.dist/dom/coverflow.js')),
 	scroll = require(p.join(appDir, '.dist/dom/scroll.js'));
 
 /*Page - Index*/
@@ -95,6 +96,9 @@ function addImageToDom(sha, path, animation = true) {
 		src.addClass('active', 'border');
 		src.filter('.folder-poster-img').addClass('has-poster');
 	}
+
+	// Lets a cover flow card drop its placeholder once its thumbnail actually lands.
+	coverflow.imageLoaded(sha);
 }
 
 function getThumbnailCardInfo(image) {
@@ -573,7 +577,16 @@ async function loadFilesIndexPage(files, file, animation, path, keepScroll, main
 	let readingProgressCurrentPath = (mainPath != path) ? (_readingProgress[path]?.path ? _readingProgress[path] : false) : false;
 
 	if (files) {
-		const viewModuleSize = handlebarsContext.page.viewModuleSize || 150;
+		// Cover flow displays a volume many times larger than the grid ever does - larger,
+		// even at its biggest card size, than the grid's own largest cached tier (300) was
+		// ever meant to cover. Reusing whatever the grid happens to be set to (150 by
+		// default) meant a cover flow row was routinely stretching a thumbnail out well past
+		// its own resolution, which is what read as blurry - not a decoding or filtering
+		// issue, just a thumbnail asked to be too small for how large this view actually
+		// shows it. `500` (see getSizes() in cache.js) exists specifically for this view;
+		// requesting it here costs nothing extra for the grid, which keeps asking for
+		// whatever size it always did.
+		const viewModuleSize = (handlebarsContext.page.view == 'coverflow') ? 1400 : (handlebarsContext.page.viewModuleSize || 150);
 		let images = [];
 
 		for (let i = 0, len = files.length; i < len; i++) {
@@ -610,7 +623,11 @@ async function loadFilesIndexPage(files, file, animation, path, keepScroll, main
 
 		}, file);
 
-		let visibleItems = calculateVisibleItems(config.view, keepScroll);
+		// handlebarsContext.page.view, not config.view directly - see the matching fix a little
+		// further down in this same function, where using config.view here left the row's
+		// thumbnail windowing keyed to the wrong view whenever a folder's own view differed
+		// from the global default.
+		let visibleItems = calculateVisibleItems(handlebarsContext.page.view, keepScroll);
 
 		for (let i = 0, len = files.length; i < len; i++) {
 			let file = files[i];
@@ -634,7 +651,9 @@ async function loadFilesIndexPage(files, file, animation, path, keepScroll, main
 				});
 			}
 			else if (file.folder || file.compressed) {
-				let images = await getFolderThumbnails(filePath, false, i, visibleItems.start, visibleItems.end);
+				// See the matching comment above this function's other branch: cover flow
+				// needs its own, larger cached tier regardless of the grid's size setting.
+				let images = await getFolderThumbnails(filePath, (handlebarsContext.page.view == 'coverflow') ? 1400 : false, i, visibleItems.start, visibleItems.end);
 				const trackingMetadata = getTrackingFolderMetadata(filePath, trackingFolderMetadata, file.folder);
 
 				if (i >= visibleItems.start && i <= (visibleItems.end + 12))
@@ -740,7 +759,12 @@ async function loadFilesIndexPage(files, file, animation, path, keepScroll, main
 
 	events.events();
 
-	return { files: pathFiles, readingProgress: readingProgress || {}, readingProgressCurrentPath: readingProgressCurrentPath || {}, html: template.load('index.content.right.' + config.view + '.html') };
+	// Not config.view directly: setCurrentPageVars('browsing', ...) (called just before this
+	// function, from loadIndexPage) already resolved the per-folder override onto
+	// handlebarsContext.page.view - reading config.view here instead would render whatever the
+	// global default is regardless of what was actually picked for this folder, which is what
+	// made switching to cover flow (or back) appear to do nothing on a plain folder.
+	return { files: pathFiles, readingProgress: readingProgress || {}, readingProgressCurrentPath: readingProgressCurrentPath || {}, html: template.load('index.content.right.' + handlebarsContext.page.view + '.html') };
 
 }
 
@@ -1218,10 +1242,13 @@ async function loadIndexPage(animation = true, path = false, content = false, ke
 				return (sortInvert) ? -(orderBy(a, b, order, orderKey, orderKey2)) : orderBy(a, b, order, orderKey, orderKey2);
 			});
 
-			let visibleItems = calculateVisibleItems((sortAndView ? sortAndView.view : config.viewIndex), keepScroll);
+			const view = sortAndView ? sortAndView.view : config.viewIndex;
+			let visibleItems = calculateVisibleItems(view, keepScroll);
 
 			for (let i = 0; i < len; i++) {
-				let images = await getFolderThumbnails(comics[i].path, false, i, visibleItems.start, visibleItems.end);
+				// See the comment on the other getFolderThumbnails() call in this file: cover
+				// flow needs its own, larger cached tier regardless of the grid's size setting.
+				let images = await getFolderThumbnails(comics[i].path, (view == 'coverflow') ? 1400 : false, i, visibleItems.start, visibleItems.end);
 				const trackingMetadata = getTrackingFolderMetadata(comics[i].path, trackingFolderMetadata, true);
 
 				comics[i].sha = sha1(comics[i].path);
@@ -1927,7 +1954,10 @@ async function getFolderThumbnails(path, forceSize = false, index = 0, start = 0
 
 	if (index >= start && index <= end) {
 		try {
-			let file = fileManager.file(path, { fromThumbnailsGeneration: true, subtask: true, log: false, sort: { extraKey: 'Reading' } });
+			// width, when forceSize is set (cover flow's 1400 tier), is what openCompressed()
+			// (file-manager.js) actually rasterises a PDF page's own cached source at - without it,
+			// that raw source stays capped at its own unrelated 300px default regardless of forceSize.
+			let file = fileManager.file(path, { fromThumbnailsGeneration: true, subtask: true, log: false, sort: { extraKey: 'Reading' }, ...(forceSize ? { width: Math.round(window.devicePixelRatio * forceSize) } : {}) });
 			file.updateConfig({ cacheOnly: true });
 
 			let _images = cache.folderThumbnails.get(path, forceSize);
@@ -2063,6 +2093,17 @@ function calculateVisibleItems(view, scrollTop = false) {
 
 		start = scrollTop ? (line - 1) * itemsPerLine : 0; // 1 margin line
 		end = (line + lines + 1) * itemsPerLine; // 1 margin line
+	}
+	else if (view == 'coverflow') {
+		// Cover flow does not scroll - what is on screen is a window around the centred
+		// cover, so the thumbnails worth generating are the ones near it. The margin (14) is
+		// wider than the covers actually drawn (WINDOW, 8 in dom/coverflow.js), so they are
+		// already warm by the time they rotate into view. The backdrop collage (COLLAGE_TILES,
+		// ±12 there) resolves its own random page per volume independently of this window.
+		const centre = coverflow.index || 0;
+
+		start = centre - 14;
+		end = centre + 14;
 	}
 	else {
 		start = scrollTop ? Math.floor(scrollTop / 72) - 4 : 0; // 4 margin items
@@ -2464,12 +2505,20 @@ function setCurrentPageVars(page, _indexLabel = false) {
 
 	const sortAndViewOpds = config.sortAndView.opds || defaultSortAndView;
 
+	// A plain folder ('browsing': neither the library root nor a labeled page, which already
+	// get their own sortAndView entry above) remembers its view *per folder* rather than
+	// sharing one global choice with every other folder - cover flow makes sense for a folder
+	// of volumes, but reused for the next, unrelated folder browsed into (a folder of loose
+	// pages, say) it is just wrong, and there is no way to tell those two shapes apart except
+	// by what was actually chosen for that specific folder. See changeView()'s matching branch.
+	const folderView = (!sortAndView && page == 'browsing' && currentPath) ? (config.folderView || {})[currentPath] : false;
+
 	handlebarsContext.page = {
 		..._indexLabel,
 		...{
 			key: key,
 			name: labelKey ? labelKey : page,
-			view: sortAndView ? sortAndView.view : config['view' + extraKey],
+			view: sortAndView ? sortAndView.view : (folderView || config['view' + extraKey]),
 			sort: sortAndView ? sortAndView.sort : config['sort' + extraKey],
 			sortInvert: sortAndView ? sortAndView.sortInvert : config['sortInvert' + extraKey],
 			foldersFirst: sortAndView ? true : (config['foldersFirst' + extraKey] || false),
@@ -2511,6 +2560,20 @@ function changeView(mode, page) {
 			config.sortAndView[labelKey] = sortAndView;
 
 			storage.updateVar('config', 'sortAndView', config.sortAndView);
+			selectElement('.view-' + mode);
+			changed = true;
+		}
+	}
+	// A plain folder ('browsing') remembers its view per folder rather than sharing one
+	// global choice with every other folder - see the matching lookup in setCurrentPageVars().
+	else if (page == 'browsing' && currentPath) {
+		const folderView = config.folderView || {};
+
+		if (mode != (folderView[currentPath] || config.view)) {
+			folderView[currentPath] = mode;
+			config.folderView = folderView;
+
+			storage.updateVar('config', 'folderView', folderView);
 			selectElement('.view-' + mode);
 			changed = true;
 		}
@@ -2947,6 +3010,22 @@ async function comicContextMenu(path, mainPath, fromIndex = true, fromIndexNotMa
 	}
 	else {
 		labels.style.display = 'none';
+	}
+
+	// Hide from Continue reading - only makes sense for a real series folder, the same set
+	// buildIndexedBoxCandidates() (dom/boxes.js) ever considers showing there in the first place.
+	let hideContinueReading = document.querySelector('#index-context-menu .context-menu-hide-continue-reading');
+
+	if (fromIndex || folder) {
+		hideContinueReading.style.display = 'block';
+		hideContinueReading.setAttribute('onclick', 'dom.labels.setHideFromContinueReading(\'' + escapeQuotes(escapeBackSlash(path), 'simples') + '\');');
+
+		const isHidden = dom.labels.isHiddenFromContinueReading(path);
+		hideContinueReading.querySelector('span').textContent = isHidden ? language.global.contextMenu.showInContinueReading : language.global.contextMenu.hideFromContinueReading;
+		hideContinueReading.querySelector('i').textContent = isHidden ? 'visibility' : 'visibility_off';
+	}
+	else {
+		hideContinueReading.style.display = 'none';
 	}
 
 	if (isServer) {
@@ -3593,10 +3672,12 @@ function editMetadataDialog(path, save = false, clear = false) {
 		const genreClusters = parseList(input('.input-metadata-genre-clusters'));
 		const source = input('.input-metadata-source').toLowerCase();
 		const anilistId = toInteger(input('.input-metadata-anilist-id'), 0, 1000000000);
+		const malId = toInteger(input('.input-metadata-mal-id'), 0, 1000000000);
 		const confidence = toInteger(input('.input-metadata-confidence'), 0, 100);
 
 		const savedMetadata = tracking.setFolderMetadata(folderPath, {
 			anilistId: anilistId,
+			malId: malId,
 			title: title,
 			author: author,
 			demographic: demographic,
@@ -3651,6 +3732,7 @@ function editMetadataDialog(path, save = false, clear = false) {
 	const readingTimeLabel = 'Reading time (minutes)';
 	const clustersLabel = 'Genre clusters';
 	const anilistIdLabel = 'AniList ID';
+	const malIdLabel = 'MyAnimeList ID';
 	const sourceValue = String(metadata.source || '').toLowerCase();
 	const demographicValue = String(metadata.demographic || '').toLowerCase();
 
@@ -3666,6 +3748,7 @@ function editMetadataDialog(path, save = false, clear = false) {
 	const content = ''
 		+ '<div class="body-medium" style="max-height: 68vh; overflow: auto; padding-right: 10px;">'
 		+ '<div class="input input-margin-top input-compact"><div><div class="inputBorder"><div class="left"></div><div class="right"></div><div class="top"><div></div><span></span></div><div class="bottom"></div></div><div class="placeholder">' + anilistIdLabel + '</div><input type="number" min="0" value="' + escapeQuotes(String(metadata.anilistId || ''), 'double') + '" class="input-metadata-anilist-id"></div></div>'
+		+ '<div class="input input-margin-top input-compact"><div><div class="inputBorder"><div class="left"></div><div class="right"></div><div class="top"><div></div><span></span></div><div class="bottom"></div></div><div class="placeholder">' + malIdLabel + '</div><input type="number" min="0" value="' + escapeQuotes(String(metadata.malId || ''), 'double') + '" class="input-metadata-mal-id"></div></div>'
 		+ '<div class="input input-margin-top input-compact"><div><div class="inputBorder"><div class="left"></div><div class="right"></div><div class="top"><div></div><span></span></div><div class="bottom"></div></div><div class="placeholder">' + titleLabel + '</div><input type="text" value="' + escapeQuotes(metadata.title || p.basename(folderPath), 'double') + '" class="input-metadata-title"></div></div>'
 		+ '<div class="input input-margin-top input-compact"><div><div class="inputBorder"><div class="left"></div><div class="right"></div><div class="top"><div></div><span></span></div><div class="bottom"></div></div><div class="placeholder">' + authorLabel + '</div><input type="text" value="' + escapeQuotes(metadata.author || '', 'double') + '" class="input-metadata-author"></div></div>'
 		+ '<div style="margin-top: 14px;"><div class="body-small" style="margin-bottom: 6px; opacity: 0.8;">' + demographicLabel + '</div><select class="input-metadata-demographic" style="width: 100%; padding: 10px; border-radius: 8px;">'
@@ -3684,6 +3767,7 @@ function editMetadataDialog(path, save = false, clear = false) {
 		+ '<div style="margin-top: 14px;"><div class="body-small" style="margin-bottom: 6px; opacity: 0.8;">' + sourceLabel + '</div><select class="input-metadata-source" style="width: 100%; padding: 10px; border-radius: 8px;">'
 		+ sourceOption('', '-')
 		+ sourceOption('anilist', 'AniList')
+		+ sourceOption('myanimelist', 'MyAnimeList')
 		+ sourceOption('manual', 'Manual')
 		+ sourceOption('import', 'Import')
 		+ '</select></div>'
@@ -3698,7 +3782,7 @@ function editMetadataDialog(path, save = false, clear = false) {
 		},
 	];
 
-	if (metadata.anilistId) {
+	if (metadata.anilistId || metadata.malId) {
 		buttons.push({
 			text: 'Wrong match',
 			function: 'dom.markFolderMetadataWrongMatch(\'' + escapedPath + '\');',
@@ -4242,6 +4326,7 @@ module.exports = {
 	setCurrentPageVars: setCurrentPageVars,
 	changeView: changeView,
 	changeViewModuleSize: changeViewModuleSize,
+	coverflow: coverflow,
 	changeSort: changeSort,
 	changeBoxes: changeConfig,
 	changeConfig: changeConfig,
@@ -4274,6 +4359,7 @@ module.exports = {
 	addProgressToDom: addProgressToDom,
 	addSepToEnd: addSepToEnd,
 	currentPathScrollTop: function () { return currentPathScrollTop },
+	currentPath: function () { return currentPath },
 	getFolderThumbnails: getFolderThumbnails,
 	_getFolderThumbnails: _getFolderThumbnails,
 	_selectFolderThumbnailSource: selectFolderThumbnailSource,

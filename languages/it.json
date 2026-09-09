@@ -30,6 +30,7 @@
 			"main": "Vista",
 			"module": "Griglia",
 			"list": "Lista",
+			"coverflow": "",
 			"moduleSize": "",
 			"fadeCompleted": "",
 			"progressBar": "",

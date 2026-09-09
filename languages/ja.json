@@ -30,6 +30,7 @@
 			"main": "表示",
 			"module": "グリッド",
 			"list": "リスト",
+			"coverflow": "",
 			"moduleSize": "グリッドのサイズ",
 			"fadeCompleted": "",
 			"progressBar": "",

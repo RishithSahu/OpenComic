@@ -4,6 +4,15 @@ const folderTitle = require(p.join(appDir, '.dist/tracking/folder-title.js'));
 const METADATA_SCRAPE_MIN_CONFIDENCE = 70;
 const METADATA_SCRAPE_TTL = 1000 * 60 * 60 * 24 * 30; // 30 days
 const METADATA_SCRAPE_RETRY_COOLDOWN = 1000 * 60 * 60 * 6; // 6 hours
+// The 6-hour cooldown above only lives in an in-memory Map, reset on every app restart - so a
+// folder AniList has never matched (an obscure title, a fan translation, a typo'd folder name)
+// got re-queried and re-searched on literally every single launch, forever, with no backoff
+// across sessions. For a large library that is a sustained, evenly-paced burst of outbound
+// requests at every startup regardless of how many of them fail the same way every time -
+// exactly the kind of fixed-cadence automated pattern Cloudflare's bot management flags,
+// independent of anything about the request itself. This is the durable, cross-session backoff
+// for that case (see metadata.lastAttemptAt, folder-metadata.js).
+const METADATA_SCRAPE_NO_MATCH_COOLDOWN = 1000 * 60 * 60 * 24 * 21; // 21 days
 const METADATA_SCRAPE_QUEUE_DELAY = 2200;
 const METADATA_SCRAPE_QUEUE_BATCH_SIZE = 24;
 const METADATA_SCRAPE_QUEUE_DELAY_FAST = 500;
@@ -451,8 +460,26 @@ function needsMetadataScrape(path = false)
 	if(metadata.source === 'manual' || metadata.source === 'import')
 		return false;
 
+	// A MyAnimeList match (the automatic backup for when AniList has no match, or is blocking
+	// this session's requests - see scrapeFolderMetadata()) is a confirmed match in its own
+	// right, not a placeholder to keep retrying AniList for: it does not go through the
+	// confidence/rating backfill checks below (MAL's search does not carry a score to have
+	// scored a confidence from, and a 0 rating there just means MAL has none, not that the
+	// scrape needs redoing), only the same age-based TTL every confirmed match gets.
+	if(metadata.source === 'myanimelist' && metadata.malId)
+		return !metadata.updatedAt || (Date.now() - metadata.updatedAt) >= METADATA_SCRAPE_TTL;
+
 	if(metadata.source !== 'anilist' || !metadata.anilistId)
+	{
+		// No confirmed match yet - but if one was already attempted recently (durably, across
+		// restarts, unlike the in-memory metadataScrapeCooldown below), leave it be rather than
+		// re-querying a title AniList has already failed to match every single time this or any
+		// past session has opened this folder.
+		if(metadata.lastAttemptAt && (Date.now() - metadata.lastAttemptAt) < METADATA_SCRAPE_NO_MATCH_COOLDOWN)
+			return false;
+
 		return true;
+	}
 
 	if((metadata.confidence || 0) < METADATA_SCRAPE_MIN_CONFIDENCE)
 		return true;
@@ -1360,13 +1387,18 @@ async function scrapeFolderMetadata(path = false, force = false)
 		const now = Date.now();
 		const current = getFolderMetadata(folderPath);
 		const cooldownUntil = metadataScrapeCooldown.get(cacheKey) || 0;
+		// Rating/seriesType backfill only ever applies to an AniList match: MAL's own metadata
+		// lookup (getComicMetadata() in tracking/myanimelist/myanimelist.js) already sets
+		// seriesType directly from its media_type field with no separate call needed, and a 0
+		// rating there just means MAL has none for that title, not that anything is missing.
 		const needsRatingBackfill = !!(current && current.source === 'anilist' && current.anilistId && (current.rating || 0) <= 0);
 		const needsSeriesTypeBackfill = !!(current && current.source === 'anilist' && current.anilistId && !current.seriesType);
+		const hasConfirmedMatch = !!(current && ((current.source === 'anilist' && current.anilistId) || (current.source === 'myanimelist' && current.malId)));
 
 		if(!force && current && (current.source === 'manual' || current.source === 'import'))
 			return current;
 
-		if(!force && !needsRatingBackfill && !needsSeriesTypeBackfill && current && current.anilistId && current.source === 'anilist' && current.updatedAt && (now - current.updatedAt) < METADATA_SCRAPE_TTL)
+		if(!force && !needsRatingBackfill && !needsSeriesTypeBackfill && hasConfirmedMatch && current.updatedAt && (now - current.updatedAt) < METADATA_SCRAPE_TTL)
 			return current;
 
 		if(!force && !needsRatingBackfill && !needsSeriesTypeBackfill && cooldownUntil && now < cooldownUntil)
@@ -1387,6 +1419,9 @@ async function scrapeFolderMetadata(path = false, force = false)
 		if(!candidates.length)
 		{
 			metadataScrapeCooldown.set(cacheKey, now + METADATA_SCRAPE_RETRY_COOLDOWN);
+			// Durable, cross-session record that this was tried and did not match - see
+			// METADATA_SCRAPE_NO_MATCH_COOLDOWN / needsMetadataScrape() above.
+			setFolderMetadata(folderPath, { lastAttemptAt: now });
 			metadataScrapeStats.unmatched++;
 			logMetadataScrape('unmatched:no-candidates', {
 				path: folderPath,
@@ -1435,11 +1470,70 @@ async function scrapeFolderMetadata(path = false, force = false)
 			referenceYear: +(current?.serializationYear || 0),
 			excludedIds: rejectedIds,
 		});
-		const best = ranked[0] || false;
+		let best = ranked[0] || false;
+		let matchSource = 'anilist';
+
+		// AniList found nothing for any candidate title - either a genuine no-match, or its
+		// search silently came back empty because this session is being blocked (Cloudflare
+		// bot-management 403s; see the AniList client's own retry/backoff, which already
+		// exhausted its retries before returning here). Either way, try the same candidates
+		// against MyAnimeList before giving up on this folder entirely - it needs no login for
+		// a search or a lookup by id, same as AniList's own anonymous requests.
+		if(!best)
+		{
+			try
+			{
+				loadSiteScript('myanimelist');
+
+				const malResultById = new Map();
+
+				for(let i = 0, len = searchCandidates.length; i < len; i++)
+				{
+					const candidate = searchCandidates[i];
+					let results = [];
+
+					try
+					{
+						results = await sitesScripts.myanimelist.searchComic(candidate);
+					}
+					catch(error)
+					{
+						console.error(error);
+					}
+
+					for(let r = 0, rlen = (results || []).length; r < rlen; r++)
+					{
+						const result = results[r];
+						if(!result?.id) continue;
+
+						if(!malResultById.has(result.id))
+							malResultById.set(result.id, result);
+					}
+				}
+
+				const malRanked = folderTitle.rankSearchResults(searchCandidates, Array.from(malResultById.values()), {
+					referenceYear: +(current?.serializationYear || 0),
+					excludedIds: rejectedIds,
+				});
+
+				if(malRanked[0])
+				{
+					best = malRanked[0];
+					matchSource = 'myanimelist';
+				}
+			}
+			catch(error)
+			{
+				console.error(error);
+			}
+		}
 
 		if(!best)
 		{
 			metadataScrapeCooldown.set(cacheKey, now + METADATA_SCRAPE_RETRY_COOLDOWN);
+			// Durable, cross-session record that this was tried and did not match - see
+			// METADATA_SCRAPE_NO_MATCH_COOLDOWN / needsMetadataScrape() above.
+			setFolderMetadata(folderPath, { lastAttemptAt: now });
 			metadataScrapeStats.unmatched++;
 			logMetadataScrape('unmatched:no-result', {
 				path: folderPath,
@@ -1448,15 +1542,20 @@ async function scrapeFolderMetadata(path = false, force = false)
 			return current || false;
 		}
 
-		// Fetch AniList metadata for the best candidate. If AniList explicitly
-		// provides a `seriesType` (via tags or country), accept the match even
-		// if the search confidence is below the usual threshold.
-		const metadata = await (sitesScripts.anilist.getComicMetadata ? sitesScripts.anilist.getComicMetadata(best.id) : {});
+		// Fetch full metadata for the best candidate from whichever site matched it. If that
+		// site explicitly provides a `seriesType` (AniList via tags/country, MAL via its own
+		// media_type field directly), accept the match even if the search confidence is below
+		// the usual threshold.
+		const matchedSite = matchSource === 'anilist' ? sitesScripts.anilist : sitesScripts.myanimelist;
+		const metadata = await (matchedSite.getComicMetadata ? matchedSite.getComicMetadata(best.id) : {});
 		const hasSeriesType = !!(metadata && metadata.seriesType);
 
 		if((best.score || 0) < METADATA_SCRAPE_MIN_CONFIDENCE && !hasSeriesType)
 		{
 			metadataScrapeCooldown.set(cacheKey, now + METADATA_SCRAPE_RETRY_COOLDOWN);
+			// Durable, cross-session record that this was tried and did not match - see
+			// METADATA_SCRAPE_NO_MATCH_COOLDOWN / needsMetadataScrape() above.
+			setFolderMetadata(folderPath, { lastAttemptAt: now });
 			metadataScrapeStats.unmatched++;
 			logMetadataScrape('unmatched:low-confidence', {
 				path: folderPath,
@@ -1474,7 +1573,10 @@ async function scrapeFolderMetadata(path = false, force = false)
 		}).filter(Boolean).slice(0, 6) : [];
 
 		const saved = setFolderMetadata(folderPath, {
-			anilistId: best.id,
+			// anilistId/malId are separate id spaces (see folder-metadata.js) - only the one for
+			// whichever site actually matched is set, the other left at its existing value (0,
+			// normally, since a folder is only ever matched once).
+			...(matchSource === 'anilist' ? { anilistId: best.id } : { malId: best.id }),
 			title: metadata?.title || best.title || '',
 			author: metadata?.author || '',
 			seriesType: metadata?.seriesType || '',
@@ -1487,7 +1589,7 @@ async function scrapeFolderMetadata(path = false, force = false)
 				readingTimeMinutes: estimatedReadingMinutes,
 				genreClusters: genreClusters,
 			},
-			source: 'anilist',
+			source: matchSource,
 			confidence: best.score || 0,
 		});
 		allowMetadataId(cacheKey, best.id);
@@ -1642,12 +1744,20 @@ async function reportWrongFolderMetadataMatch(path = false, retry = true)
 	const current = getFolderMetadata(folderPath) || {};
 	const cacheKey = metadataScrapeCacheKey(folderPath);
 
+	// AniList and MyAnimeList ids share the same rejection set (see the excludedIds passed to
+	// folderTitle.rankSearchResults() for both in scrapeFolderMetadata()) - they are different
+	// id spaces, so this only ever risks skipping an unrelated numeric coincidence, not a real
+	// collision.
 	if(current.anilistId > 0)
 		rejectMetadataId(cacheKey, current.anilistId);
+
+	if(current.malId > 0)
+		rejectMetadataId(cacheKey, current.malId);
 
 	const fallbackTitle = current.title || p.basename(folderPath) || '';
 	setFolderMetadata(folderPath, {
 		anilistId: 0,
+		malId: 0,
 		title: fallbackTitle,
 		author: '',
 		seriesType: '',
@@ -1668,6 +1778,7 @@ async function reportWrongFolderMetadataMatch(path = false, retry = true)
 	logMetadataScrape('wrong-match', {
 		path: folderPath,
 		rejectedAnilistId: +(current.anilistId || 0),
+		rejectedMalId: +(current.malId || 0),
 		retry: !!retry,
 	});
 

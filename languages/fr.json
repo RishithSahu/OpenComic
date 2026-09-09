@@ -30,6 +30,7 @@
 			"main": "Vue",
 			"module": "Grille",
 			"list": "Liste",
+			"coverflow": "",
 			"moduleSize": "Taille de la grille",
 			"fadeCompleted": "Atténuer les terminés",
 			"progressBar": "Afficher la barre de progression",

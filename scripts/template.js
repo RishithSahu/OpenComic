@@ -116,6 +116,11 @@ function changeContentRight(html, animation = true, keepScroll = false)
 	}, 300, contentRightZindex);
 
 	contentRightZindex++;
+
+	// Cover flow has to bind to the markup that was just inserted. Called for every view,
+	// not just that one - it looks for its own container and resets if there isn't one, so
+	// switching away from cover flow tears its listeners down here too.
+	if(dom.coverflow) dom.coverflow.init();
 }
 
 function loadContentRight(template, animation, keepScroll)

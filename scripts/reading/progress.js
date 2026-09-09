@@ -1,6 +1,18 @@
 var saveIsActive = false;
 
-function save(path = false, mainPath = false) {
+// Which of the (up to three) folders a single read writes an entry for `role` identifies:
+// 'mainPath' for dom.history.mainPath itself, 'chapter' for the read file's immediate parent,
+// 'series' for that parent's own parent. This is what lets dom/boxes.js's Continue reading
+// tell a real series apart from a chapter subfolder below it or a category folder above it
+// without having to compare timestamps: role is fixed at the moment each entry is written and
+// stays true forever, whereas the *entries themselves* keep getting overwritten independently
+// as more is read (a chapter's own path is unique to it and never touched again once you move
+// on, while mainPath/the series folder get overwritten by every subsequent read anywhere in
+// the same series) - comparing which entries currently share a timestamp does not survive
+// that, since a chapter read weeks ago and never revisited ends up the sole survivor of what
+// was once a matching group, indistinguishable from a genuine standalone series by anything
+// other than this tag.
+function save(path = false, mainPath = false, role = 'mainPath') {
 	if (!onReading || !reading.isLoaded())
 		return;
 
@@ -23,14 +35,24 @@ function save(path = false, mainPath = false) {
 	if (mainPath === false) {
 		mainPath = dom.history.mainPath;
 
-		// Save also the current folder progress
+		// Save also the current folder progress. For a compressed chapter (Series/Chapter016.cbz)
+		// `dirname` is the archive's own path - the chapter, not the series - since a page inside
+		// one is addressed as a real joined path (.../Chapter016.cbz/page001.jpg per file-manager.js),
+		// so p.dirname() of it lands on the archive itself. For a chapter subfolder of loose pages
+		// it is that subfolder directly. Either way this is the chapter level, tagged as such.
 		if (mainPath !== dirname)
-			save(path, dirname);
+			save(path, dirname, 'chapter');
 
-		// For compressed files, also save progress for the series folder (parent of the compressed file)
+		// Also save progress one level above that. For a flat "series/chapter.cbz" library this
+		// is mainPath itself (a no-op, already covered by the base save below) - but for a library
+		// organised into another level above the series (a category folder containing series
+		// folders that are themselves split into chapters), mainPath is stuck at the category,
+		// `dirname` is the chapter, and this is the series folder in between - the one
+		// dom/boxes.js's Continue reading actually wants, tagged 'series' so it can tell this
+		// apart from the chapter above without needing to know the real folder structure.
 		const parentOfDirname = p.dirname(dirname);
-		if (fileManager.isCompressed(dirname) && mainPath !== parentOfDirname && dirname !== parentOfDirname)
-			save(path, parentOfDirname);
+		if (mainPath !== parentOfDirname && dirname !== parentOfDirname)
+			save(path, parentOfDirname, 'series');
 	}
 
 	const hasChildFolders = Object.values(reading.currentComics()).find((comic) => comic.folder);
@@ -64,6 +86,7 @@ function save(path = false, mainPath = false) {
 		index: currentPage,
 		path: relative.path(path.replace(/\?page=[0-9]+$/, '')),
 		lastReading: Date.now(),
+		role: role,
 		ebook: reading.isEbook(),
 		progress: progress,
 		chapterIndex: chapterIndex,

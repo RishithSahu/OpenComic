@@ -3,6 +3,11 @@ const METADATA_SCHEMA_VERSION = 2;
 const ALLOWED_SOURCES = new Set([
 	'',
 	'anilist',
+	// Backup lookup for when AniList has no match, or is blocking this session's requests
+	// (Cloudflare bot-management 403s, independent of anything actually wrong with a request -
+	// see the AniList client's own retry/backoff for that) - tried automatically, not something
+	// a user picks, so it is tagged distinctly from 'anilist' rather than folded into it.
+	'myanimelist',
 	'manual',
 	'import',
 ]);
@@ -112,6 +117,10 @@ function createDefaultFolderMetadata()
 	return {
 		version: METADATA_SCHEMA_VERSION,
 		anilistId: 0,
+		// Kept separate from anilistId rather than reused for it - the two are different id
+		// spaces, and code that calls back into a specific site's API (a "refresh" action, a
+		// "view online" link) needs to know which site's id it is holding, not just a number.
+		malId: 0,
 		title: '',
 		author: '',
 		seriesType: '',
@@ -128,6 +137,12 @@ function createDefaultFolderMetadata()
 		confidence: 0,
 		createdAt: 0,
 		updatedAt: 0,
+		// When a scrape last concluded with no usable match, independent of `source` (which has
+		// no "tried and failed" value of its own - only '', 'anilist', 'manual' or 'import') so a
+		// folder AniList has never matched still gets a durable record that it was tried, and
+		// needsMetadataScrape() (tracking.js) can leave it alone for a while instead of
+		// re-querying it on every single app launch forever.
+		lastAttemptAt: 0,
 	};
 }
 
@@ -146,6 +161,7 @@ function sanitizeFolderMetadata(input = {}, now = Date.now())
 
 	metadata.version = METADATA_SCHEMA_VERSION;
 	metadata.anilistId = normalizeInteger(input.anilistId, 0);
+	metadata.malId = normalizeInteger(input.malId, 0);
 	metadata.title = normalizeString(input.title, 256);
 	metadata.author = normalizeString(input.author, 120);
 	metadata.seriesType = normalizeSeriesType(input.seriesType);
@@ -162,6 +178,7 @@ function sanitizeFolderMetadata(input = {}, now = Date.now())
 	metadata.confidence = normalizeInteger(input.confidence, 0, 100);
 	metadata.createdAt = createdAt || (now || 0);
 	metadata.updatedAt = updatedAt || (now || metadata.createdAt);
+	metadata.lastAttemptAt = normalizeInteger(input.lastAttemptAt, 0);
 
 	return metadata;
 }

@@ -1,0 +1,231 @@
+/* Cover flow view: volumes as a 3D carousel, one centred and the rest angled away to either
+   side. The row itself is transform/opacity only, so it stays on the compositor, and its
+   covers are the same cached thumbnails the grid view already generates for these volumes
+   (just at a size cover flow needs and the grid does not). The one thing this view does ask
+   for that the grid never has is the backdrop's fixed, once-per-series mosaic - see
+   .coverflow-backdrop below for how that stays bounded. */
+
+.content-view-coverflow {
+	position: relative;
+	width: 100%;
+	height: 100%;
+	overflow: hidden;
+	user-select: none;
+	background: var(--md-sys-color-surface);
+
+	/* Overwritten by layout() from the measured container so the row scales with the
+	   window; these are only what the covers fall back to before the first layout. */
+	--cf-cover-h: 380px;
+	--cf-cover-w: 258px;
+}
+
+/* Ambient backdrop: a mosaic of one centre page from each of up to 20 volumes sampled at random
+   from across the whole series (never a volume's first or last page), shown plainly - not
+   blurred - filling the view behind the row (see loadSeriesCollage() in dom/coverflow.js). Fixed
+   for the life of the series: it does not reassign itself as the row moves, and is cached to disk
+   so a later visit costs nothing until a volume is actually added or removed. A scrim (the
+   ::after below) dims it for legibility instead of a blur filter, since blurring a mosaic of
+   mostly black-and-white manga pages - unlike the colour covers this used to reuse - just
+   averages them into grey fog with nothing recognisable left in it. */
+.coverflow-backdrop {
+	position: absolute;
+	inset: 0;
+	z-index: 0;
+	overflow: hidden;
+	pointer-events: none;
+	opacity: 0;
+	transition: opacity 700ms var(--md-sys-motion-easing-standard);
+}
+
+.coverflow-backdrop.active {
+	opacity: 1;
+}
+
+/* grid-template-columns/rows are set inline by buildCollageGrid() (dom/coverflow.js), sized to
+   however many tiles this series actually has - not fixed here, so a series short of the usual
+   tile count gets fewer, larger tiles rather than empty cells. */
+.coverflow-collage {
+	position: absolute;
+	inset: 0;
+	display: grid;
+}
+
+.coverflow-collage-tile {
+	background-size: cover;
+	background-position: center;
+}
+
+.coverflow-backdrop::after {
+	content: '';
+	position: absolute;
+	inset: 0;
+	background:
+		linear-gradient(rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0.7) 55%, rgba(0, 0, 0, 0.85)),
+		radial-gradient(ellipse at center, transparent 35%, rgba(0, 0, 0, 0.45) 100%);
+}
+
+.coverflow-stage {
+	position: absolute;
+	inset: 0;
+	z-index: 1;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+
+	/* The vanishing point sits a little above centre so the covers lean away from the
+	   reader rather than tipping forward, which is what makes the row read as a shelf. */
+	perspective: 1400px;
+	perspective-origin: 50% 42%;
+}
+
+.coverflow-track {
+	position: relative;
+	width: 0;
+	height: 0;
+	transform-style: preserve-3d;
+}
+
+/* One cover. Positioned from its own centre so the JS only has to supply an offset, and
+   `translate(-50%, -50%)` keeps that true at any cover size. */
+.coverflow-item {
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: var(--cf-cover-w);
+	height: var(--cf-cover-h);
+	margin-left: calc(var(--cf-cover-w) / -2);
+	margin-top: calc(var(--cf-cover-h) / -2);
+
+	transform-style: preserve-3d;
+	backface-visibility: hidden;
+	cursor: pointer;
+
+	/* --cf-duration is dropped to ~0 for the first placement so the row does not visibly
+	   fly in from the centre when the view opens. */
+	transition:
+		transform var(--cf-duration, 480ms) var(--md-sys-motion-easing-emphasized-decelerate),
+		opacity var(--cf-duration, 480ms) var(--md-sys-motion-easing-standard);
+}
+
+/* Anything outside the rendered window is taken out of the layer tree entirely rather
+   than left transparent - a long series should never cost more than the covers on screen. */
+.coverflow-item.coverflow-hidden {
+	display: none;
+}
+
+.coverflow-item-inner {
+	position: relative;
+	width: 100%;
+	height: 100%;
+
+	/* Dimming of the off-centre covers lives here rather than on .coverflow-item, which is
+	   carrying the 3D transform - a filter there would flatten it. */
+	transition: filter var(--cf-duration, 480ms) var(--md-sys-motion-easing-standard);
+}
+
+.coverflow-item img {
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	background: var(--md-sys-color-surface-variant);
+	box-shadow:
+		0 2px 6px rgba(0, 0, 0, 0.45),
+		0 18px 40px rgba(0, 0, 0, 0.55);
+	opacity: 0;
+	transition: opacity 260ms var(--md-sys-motion-easing-standard);
+}
+
+.coverflow-item img.active {
+	opacity: 1;
+}
+
+/* Stands in for a cover whose thumbnail has not been generated yet, so a series that is
+   still warming up reads as loading rather than as broken. */
+.coverflow-item-placeholder {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 8px;
+	text-align: center;
+	overflow: hidden;
+	color: var(--md-sys-color-on-surface-variant);
+	background: var(--md-sys-color-surface-variant);
+	box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
+	opacity: 1;
+	transition: opacity 260ms var(--md-sys-motion-easing-standard);
+}
+
+.coverflow-item.coverflow-has-image .coverflow-item-placeholder {
+	opacity: 0;
+}
+
+/* Volume number badge, mirroring the corner tag printed on most volume covers. */
+.coverflow-item-number {
+	position: absolute;
+	right: 0;
+	bottom: 0;
+	min-width: 26px;
+	padding: 3px 7px;
+	text-align: center;
+	color: #fff;
+	background: rgba(0, 0, 0, 0.62);
+	pointer-events: none;
+}
+
+/* --- chrome ------------------------------------------------------------------------ */
+
+.coverflow-counter {
+	position: absolute;
+	top: 18px;
+	left: 22px;
+	z-index: 5;
+	color: var(--md-sys-color-on-surface-variant);
+	pointer-events: none;
+}
+
+.coverflow-title {
+	position: absolute;
+	left: 50%;
+	bottom: 26px;
+	z-index: 5;
+	max-width: min(70%, 720px);
+	transform: translateX(-50%);
+	text-align: center;
+	color: var(--md-sys-color-on-surface);
+	text-shadow: 0 1px 6px rgba(0, 0, 0, 0.8);
+	pointer-events: none;
+
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.coverflow-subtitle {
+	position: absolute;
+	left: 50%;
+	bottom: 8px;
+	z-index: 5;
+	transform: translateX(-50%);
+	color: var(--md-sys-color-on-surface-variant);
+	pointer-events: none;
+}
+
+.coverflow-empty {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: var(--md-sys-color-on-surface-variant);
+}
+
+/* Respect the platform setting rather than animating regardless - the slide is the whole
+   point of this view, but it should not be forced on someone who has asked for less. */
+@media (prefers-reduced-motion: reduce) {
+	.coverflow-item {
+		transition-duration: 1ms;
+	}
+}

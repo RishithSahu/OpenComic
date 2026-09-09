@@ -30,6 +30,7 @@
 			"main": "Widok",
 			"module": "Siatka",
 			"list": "Lista",
+			"coverflow": "",
 			"moduleSize": "Rozmiar siatki",
 			"fadeCompleted": "",
 			"progressBar": "",

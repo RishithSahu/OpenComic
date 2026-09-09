@@ -30,6 +30,7 @@
 			"main": "Nézet",
 			"module": "Rács",
 			"list": "Lista",
+			"coverflow": "",
 			"moduleSize": "",
 			"fadeCompleted": "",
 			"progressBar": "",

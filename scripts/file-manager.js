@@ -338,7 +338,23 @@ var file = function (path, _config = false) {
 
 		if (this.config.fromThumbnailsGeneration) {
 			compressedOpened[path].compressed.config.fromThumbnailsGeneration = true;
-			compressedOpened[path].compressed.config.width = Math.min(compressedOpened[path].compressed._config.width, Math.round(window.devicePixelRatio * 300));
+
+			// The raw page gets rasterised once here, cached, and every actual thumbnail size
+			// (cache.js's getSizes(), 100-1400) is then resized down from that one cached source -
+			// so this has to cover whichever size the caller actually wants, not a flat guess.
+			// this.config.width is that caller's own explicit request (getFolderThumbnails() in
+			// dom.js sets it from forceSize for cover flow's larger 1400 tier); falling back to the
+			// same 300 baseline every other thumbnail caller gets when nothing more specific was
+			// asked for. An earlier version of this capped against
+			// `compressedOpened[path].compressed._config.width` instead, meant to bound a caller
+			// asking for more than it needs - but _config.width is a fixed per-object default
+			// (`window.devicePixelRatio * 300`, file-manager.js's `fileCompressed` constructor)
+			// that nothing here ever raises, so `Math.min(..., DPR*1400)` always picked the smaller,
+			// unrelated 300 and the raw source stayed capped there regardless of what was actually
+			// requested - a PDF volume's cover was still being upscaled from a 300px-equivalent
+			// source into whatever tier asked for it, unlike a plain image page, which is never
+			// downsampled before its own resize.
+			compressedOpened[path].compressed.config.width = this.config.width || Math.round(window.devicePixelRatio * 300);
 		}
 
 		return compressedOpened[path].compressed;
@@ -3432,7 +3448,20 @@ var fileCompressed = function (path, _realPath = false, forceType = false, prefi
 					}
 				}
 
-				let width = (status?.size?.width || page.getViewport({ scale: 1 }).width);
+				// Not status?.size?.width - for the fromThumbnailsGeneration case (the only case
+				// that ever reaches here for a cover/thumbnail), that field holds the fabricated
+				// {width:800,height:1200} readPdf() records for its synthetic single-page listing,
+				// a placeholder never meant to stand in for a real measurement (see the comment on
+				// that listing above). It happened to read as a real one anyway once persisted into
+				// this file's status, and a PDF page's own coordinate system is in points, not
+				// pixels - a 6x9in manga trim is ~432x648pt - so "800" is frequently nowhere near a
+				// given page's actual width. `scale` computed against it came out wrong in whichever
+				// direction the real width missed the guess by, silently over- or under-rendering
+				// the page this was actually asked to produce - undersized was the case that reads
+				// as blurry once resized up to display size, and `withoutEnlargement` (image.js)
+				// stops the later resize step from padding it back out. `page` is already open right
+				// here regardless, so there is no cost to measuring it for real instead of guessing.
+				let width = page.getViewport({ scale: 1 }).width;
 
 				let scale = this.config.width / width;
 

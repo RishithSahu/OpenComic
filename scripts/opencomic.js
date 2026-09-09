@@ -349,8 +349,10 @@ var appBaseLoaded = new Promise(function (resolve) {
 });
 
 // Startup timings stay measurable via `startupPerf` in DevTools but are not logged on every
-// launch; set OPENCOMIC_STARTUP_LOG=1 to print them.
-const startupPerfLog = process.env.OPENCOMIC_STARTUP_LOG === '1';
+// launch; set OPENCOMIC_STARTUP_LOG=1 or pass --startup-log to print/persist them - the same
+// opt-in main.js's own writeStartupLog() uses, and the two are merged into one file so a single
+// run shows main-process and renderer timing on the same timeline.
+const startupPerfLog = process.env.OPENCOMIC_STARTUP_LOG === '1' || process.argv.includes('--startup-log') || (electronRemote?.process?.argv || []).includes('--startup-log');
 const startupPerf = {
 	t0: (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now(),
 };
@@ -360,8 +362,16 @@ function startupMark(label) {
 	const elapsed = Math.round(now - startupPerf.t0);
 	startupPerf[label] = elapsed;
 
-	if (startupPerfLog)
-		console.log('[startup]', label + ':', elapsed + 'ms');
+	if (!startupPerfLog) return;
+
+	console.log('[startup]', label + ':', elapsed + 'ms');
+
+	try {
+		const logsDir = p.join(electronRemote.app.getPath('userData'), 'logs');
+		if (!fs.existsSync(logsDir)) fs.mkdirSync(logsDir, { recursive: true });
+		fs.appendFileSync(p.join(logsDir, 'startup.log'), '[' + new Date().toISOString() + '] [renderer] ' + label + ' at +' + elapsed + 'ms\n', 'utf8');
+	}
+	catch (error) { /* diagnostic only */ }
 }
 
 function deferStartupTask(task, delay = 1200) {

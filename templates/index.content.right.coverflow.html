@@ -1,0 +1,34 @@
+<div class="content-view-coverflow" oncontextmenu="dom.coverflow.contextMenu(event)">
+	{{#if comics.length}}
+	<div class="coverflow-backdrop">
+		<!-- Tile count depends on how many volumes this series has (capped at COLLAGE_TILES), so
+		     its divs are built in JS, not here - see buildCollageGrid() in dom/coverflow.js. -->
+		<div class="coverflow-collage"></div>
+	</div>
+
+	<div class="coverflow-counter body-small"></div>
+
+	<div class="coverflow-stage">
+		<div class="coverflow-track">
+			{{#each comics}}
+			<div class="coverflow-item coverflow-hidden" data-index="{{@index}}" data-name="{{name}}" data-subname="{{subname}}" data-path="{{chain 'escapeQuotesDoubles' path}}" data-main-path="{{chain 'escapeQuotesDoubles' mainPath}}" data-folder="{{#if folder}}true{{else}}false{{/if}}" onclick="dom.coverflow.select({{@index}})">
+				<div class="coverflow-item-inner">
+					<div class="coverflow-item-placeholder body-small">{{name}}</div>
+					{{#if folder}}
+					<img class="sha-image-{{poster.sha}}{{#if poster.path}} active{{/if}}"{{#if poster.path}} src="{{chain 'shortWindowsPath' 'encodeSrcURI' poster.path}}"{{/if}}>
+					{{else}}
+					<img class="sha-image-{{sha}}{{#if thumbnail}} active{{/if}}"{{#if thumbnail}} src="{{chain 'shortWindowsPath' 'encodeSrcURI' thumbnail}}"{{/if}}>
+					{{/if}}
+					<div class="coverflow-item-number label-small"></div>
+				</div>
+			</div>
+			{{/each}}
+		</div>
+	</div>
+
+	<div class="coverflow-title title-medium"></div>
+	<div class="coverflow-subtitle body-small"></div>
+	{{else}}
+	{{> index.content.right.else.html}}
+	{{/if}}
+</div>

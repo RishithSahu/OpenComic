@@ -12,10 +12,12 @@ async function searchComic(title)
 	controller = new AbortController();
 
 	const variables = new URLSearchParams({
-		q: title,
-		page: 1,
-		perPage: 10,
-		fields: 'title,main_picture,authors{first_name,last_name}', // 'title,main_picture,authors{first_name,last_name},synopsis',
+		// MAL's manga search takes `q`/`limit`/`offset`/`fields` - not the `page`/`perPage`
+		// AniList's own API uses, which this had been sending instead. MAL's API rejects the
+		// request outright (400) rather than just ignoring the unrecognised parameters.
+		q: title.slice(0, 64), // MAL 400s on a query much longer than this
+		limit: 10,
+		fields: 'title,alternative_titles,main_picture,authors{first_name,last_name}',
 	});
 
 	const options = {
@@ -49,10 +51,21 @@ async function searchComic(title)
 
 				return {
 					id: node.id,
-					title: node.title,
-					image: node.main_picture.medium,
+					// The same shape scripts/tracking/anilist/anilist.js's searchComic() returns,
+					// so folderTitle.rankSearchResults() (tracking/folder-title.js) can score a
+					// MAL result exactly like an AniList one without knowing which site it came
+					// from - MAL's search endpoint just does not carry a year or score to fill
+					// serializationYear/rating with, so those stay at their default of 0.
+					title: node.title || '',
+					titleRomaji: node.title || '',
+					titleEnglish: node?.alternative_titles?.en || '',
+					titleNative: node?.alternative_titles?.ja || '',
+					titleUserPreferred: node.title || '',
+					synonyms: Array.isArray(node?.alternative_titles?.synonyms) ? node.alternative_titles.synonyms : [],
+					serializationYear: 0,
+					rating: 0,
+					image: node?.main_picture?.medium || node?.main_picture?.large || '',
 					authors: authors,
-					// synopsis: media.synopsis || null,
 				};
 
 			});
@@ -63,6 +76,69 @@ async function searchComic(title)
 	catch(error) {}
 
 	return [];
+}
+
+// Full metadata for one manga, keyed by its own id, using only the app's client id - unlike
+// getComicData() below this needs no logged-in session, since it is used for the same
+// automatic, unattended lookup searchComic() above already does without one (a backup for
+// scrapeFolderMetadata() in tracking.js when AniList has no match or is blocking this
+// session's requests).
+async function getComicMetadata(siteId)
+{
+	const options = {
+		method: 'GET',
+		headers: {
+			'X-MAL-CLIENT-ID': site.auth.clientId,
+			'Accept': 'application/json',
+		},
+	};
+
+	const seriesTypes = { manga: 'manga', manhwa: 'manhwa', manhua: 'manhua' };
+
+	try
+	{
+		const response = await fetch('https://api.myanimelist.net/v2/manga/'+siteId+'?fields=title,alternative_titles,authors{first_name,last_name},genres,media_type,mean,start_date,synopsis,num_chapters,num_volumes', options);
+
+		if(response.status !== 200)
+			return {};
+
+		const json = await response.json();
+		if(!json.id)
+			return {};
+
+		const authors = (json.authors || []).map(function(author) {
+
+			if(['Story', 'Art', 'Story & Art', 'Original Story'].includes(author.role))
+				return author.node.first_name+' '+author.node.last_name;
+
+			return false;
+
+		}).filter(Boolean);
+
+		return {
+			id: json.id,
+			title: json.title || '',
+			titleRomaji: json.title || '',
+			titleEnglish: json?.alternative_titles?.en || '',
+			titleNative: json?.alternative_titles?.ja || '',
+			titleUserPreferred: json.title || '',
+			synonyms: Array.isArray(json?.alternative_titles?.synonyms) ? json.alternative_titles.synonyms : [],
+			author: authors[0] || '',
+			// MAL's media_type distinguishes manga/manhwa/manhua directly (unlike AniList, which
+			// only implies it via country of origin or tags) - no inference needed here.
+			seriesType: seriesTypes[json.media_type] || '',
+			demographic: '', // Not exposed by MAL's v2 API
+			genres: (json.genres || []).map(function(genre) { return genre?.name; }).filter(Boolean),
+			description: String(json.synopsis || ''),
+			serializationYear: +(String(json?.start_date || '').slice(0, 4)) || 0,
+			rating: Math.round(+(json.mean || 0) * 10), // MAL scores out of 10, this schema is out of 100
+			chapters: +json.num_chapters || 0,
+			volumes: +json.num_volumes || 0,
+		};
+	}
+	catch(error) {}
+
+	return {};
 }
 
 // Return data of comic/manga
@@ -266,6 +342,7 @@ async function track(toTrack)
 module.exports = {
 	setSiteData: setSiteData,
 	searchComic: searchComic,
+	getComicMetadata: getComicMetadata,
 	getComicData: getComicData,
 	login: login,
 	refreshToken: refreshToken,

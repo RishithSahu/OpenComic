@@ -50,10 +50,13 @@
       "
     >
       {{#if comicsIndex}} {{#if sortAndView}} {{#compare sortAndView.view '=='
-      'module'}}view_module{{else}}view_list{{/compare}} {{else}} {{#compare
-      config.viewIndex '==' 'module'}}view_module{{else}}view_list{{/compare}}
+      'module'}}view_module{{else compare sortAndView.view '=='
+      'coverflow'}}view_carousel{{else}}view_list{{/compare}} {{else}}
+      {{#compare config.viewIndex '==' 'module'}}view_module{{else compare
+      config.viewIndex '==' 'coverflow'}}view_carousel{{else}}view_list{{/compare}}
       {{/if}} {{else}} {{#compare config.view '=='
-      'module'}}view_module{{else}}view_list{{/compare}} {{/if}}
+      'module'}}view_module{{else compare config.view '=='
+      'coverflow'}}view_carousel{{else}}view_list{{/compare}} {{/if}}
     </div>
     <div class="bar-buttons-separator"></div>
     <div

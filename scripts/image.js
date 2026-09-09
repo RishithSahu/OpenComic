@@ -29,6 +29,15 @@ async function resize(fromImage, toImage, config = {})
 		fit: sharp.fit.inside,
 		quality: 95,
 		background: 'white',
+		// sharp enlarges past the source's own resolution by default - fine for the grid's small
+		// tiers, which essentially never ask for more than a real page already has, but Cover
+		// Flow's much larger 1400 tier routinely does for anything below print resolution (most
+		// scanlation raws included), and the result was a permanently blurry file baked into the
+		// cache no source-side fix (the PDF extraction cap, `openCompressed()`) can help with -
+		// there is no detail to extract that was never there. Left at native resolution instead;
+		// the browser's own upscale to fill the cover's CSS box is a single pass, not this baked
+		// into the cached file and then scaled again on top.
+		withoutEnlargement: true,
 		...config,
 	};
 

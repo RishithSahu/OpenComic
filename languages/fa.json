@@ -30,6 +30,7 @@
 			"main": "نمایش",
 			"module": "شبکه‌ای",
 			"list": "فهرستی",
+			"coverflow": "",
 			"moduleSize": "اندازه شبکه",
 			"fadeCompleted": "کم‌رنگ کردن موارد تکمیل‌شده",
 			"progressBar": "نمایش نوار پیشرفت",

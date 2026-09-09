@@ -711,6 +711,41 @@ function syncRenderedPdfDimensions(index, imageData, data = false)
 	scheduleRenderedPdfDimensionsSync();
 }
 
+// Whether index is still inside the window setRenderQueue() actively keeps prefetched
+// (getQueueLimits() - a handful of pages either side of currentIndex, not the whole
+// renderedBlobLimit() budget). pruneRenderedObjectURL() below only ever considers eviction
+// once that larger budget is already exceeded, so using the tight window as the "never evict"
+// floor here does not reintroduce the thrashing renderedBlobLimit() being wider than it was
+// written to avoid - a page just past the hot window stays cached for free until the budget
+// itself is actually exceeded; only once it is does the oldest surplus get reclaimed.
+function isWithinRenderWindow(index)
+{
+	const limits = getQueueLimits();
+	const distance = index - currentIndex;
+
+	return distance >= -limits.prev && distance <= limits.next;
+}
+
+// Reverses exactly what the render path (further down this file) does to show a page: drops
+// the blob src, the classes/dataset it stamped on for that render, and the render-cache state
+// that would otherwise make shouldQueueRender() believe this index is still showing something.
+// Does not touch img.dataset.width/height - nothing reads those for an index outside the
+// render window, and a revisit re-renders and overwrites them anyway.
+function unrenderImage(entry)
+{
+	if(entry.img)
+	{
+		entry.img.removeAttribute('src');
+		delete entry.img.dataset.baseSrc;
+		entry.img.classList.remove('blobRendered', 'blobRender');
+	}
+
+	delete rendered[entry.index];
+	delete renderedQuality[entry.index];
+	delete renderedMagnifyingGlass[entry.index];
+	delete renderedMagnifyingGlassQuality[entry.index];
+}
+
 function pruneRenderedObjectURL()
 {
 	const limit = renderedBlobLimit();
@@ -729,19 +764,6 @@ function pruneRenderedObjectURL()
 
 	if(!candidates.length) return;
 
-	// Collect the blobs currently attached to an <img> once instead of re-walking every
-	// <img> in the document for each eviction candidate.
-	const inUse = new Set();
-	const images = document.querySelectorAll('img');
-
-	for(let i = 0, len = images.length; i < len; i++)
-	{
-		const src = images[i].src;
-
-		if(src && src.startsWith('blob:'))
-			inUse.add(src);
-	}
-
 	// Keep going until both budgets are satisfied rather than evicting a fixed number: one
 	// oversized page can put the cache over its byte budget on its own, and a fixed slice
 	// sized from the count would never reclaim it.
@@ -749,8 +771,15 @@ function pruneRenderedObjectURL()
 	{
 		const entry = candidates[i];
 
-		if(inUse.has(entry?.data?.blob))
+		// Not "is some <img> still pointing at this blob" - every page gets one <img> for the
+		// life of the book/chapter (reading.js's addHtmlImages()) and nothing else ever clears
+		// its src as the page scrolls away, so that check was true for every page ever rendered
+		// this session and nothing downstream of it was ever actually reachable. Distance from
+		// the current page is what should decide this instead - see isWithinRenderWindow().
+		if(isWithinRenderWindow(entry.index))
 			continue;
+
+		unrenderImage(entry);
 
 		if(revokeObjectURL(entry.key, true))
 		{

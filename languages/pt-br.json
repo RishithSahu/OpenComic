@@ -30,6 +30,7 @@
 			"main": "Ver",
 			"module": "Grade",
 			"list": "Lista",
+			"coverflow": "",
 			"moduleSize": "Tamanho da grade",
 			"fadeCompleted": "",
 			"progressBar": "",

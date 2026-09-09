@@ -30,6 +30,7 @@
 			"main": "العرض",
 			"module": "عرض الشبكة",
 			"list": "عرض القائمة",
+			"coverflow": "",
 			"moduleSize": "حجم الشبكة",
 			"fadeCompleted": "",
 			"progressBar": "",

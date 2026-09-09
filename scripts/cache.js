@@ -105,7 +105,13 @@ async function processTheImageQueue(img = false)
 
 async function addImageToQueue(file, size, sha, callback, vars, type, forceSize)
 {
-	threads.job('cache', {useThreads: 1}, processTheImageQueue, {file: file, size: size, sha: sha, callback: callback, vars: vars, type: type, forceSize: forceSize});
+	// useThreads: 1 meant every logical core could run its own decode+resize concurrently with no
+	// cap at all - each one a real, if individually modest, sharp/libvips memory footprint (the
+	// decoded source page, not just the output thumbnail). Scrolling fast through a folder of
+	// hundreds of items - each a distinct source file - could fire that many jobs at once, and
+	// their memory added up rather than overlapping. 0.4 leaves this comfortably parallel (still
+	// several images at once on any real machine) without every core's worth running together.
+	threads.job('cache', {useThreads: 0.4}, processTheImageQueue, {file: file, size: size, sha: sha, callback: callback, vars: vars, type: type, forceSize: forceSize});
 }
 
 function stopQueue()
@@ -138,6 +144,12 @@ function getSizes()
 			200,
 			250,
 			300,
+			// Cover flow displays a single volume many times larger than the grid's own card
+			// ever gets - the centred cover especially, which draws itself at CENTRE_SCALE times
+			// the row's own already-larger size (dom/coverflow.js) - so even the grid's biggest
+			// size setting (300) undershoots what "bigger, crystal-clear covers" actually needs
+			// on screen. This tier exists for that view specifically; the grid never asks for it.
+			1400,
 		],
 		image: {
 			100: Math.round(devicePixelRatio * 100),
@@ -145,6 +157,7 @@ function getSizes()
 			200: Math.round(devicePixelRatio * 200),
 			250: Math.round(devicePixelRatio * 250),
 			300: Math.round(devicePixelRatio * 300),
+			1400: Math.round(devicePixelRatio * 1400),
 		},
 		poster: {
 			100: Math.round(devicePixelRatio * 96),
@@ -152,6 +165,7 @@ function getSizes()
 			200: Math.round(devicePixelRatio * 196),
 			250: Math.round(devicePixelRatio * 246),
 			300: Math.round(devicePixelRatio * 296),
+			1400: Math.round(devicePixelRatio * 1391),
 		},
 	};
 }
@@ -165,6 +179,7 @@ function getRatios()
 			200: 1.5,
 			250: 1.5,
 			300: 1.5,
+			1400: 1.5,
 		},
 		poster: {
 			100: 1.52083,
@@ -172,6 +187,7 @@ function getRatios()
 			200: 1.51020,
 			250: 1.50813,
 			300: 1.50675,
+			1400: 1.5,
 		},
 	};
 }
@@ -198,12 +214,24 @@ function addImageVars(image)
 	if(image.forceSize && image.forceSize != 150)
 		vars.push('size='+image.forceSize);
 
+	// A cached thumbnail's own key only ever encodes the *requested* pixel size (via forceSize
+	// above), never the resolution of the source it was actually generated from or the settings
+	// it was resized with - so a fix to either (the PDF raw-extraction cap in openCompressed(),
+	// file-manager.js; sharp's own default of enlarging past a source's native resolution,
+	// image.js) has no way to invalidate a 1400-tier thumbnail already generated under the old
+	// behaviour. Without this it would keep serving that same blurry cached file forever. Scoped
+	// to the 1400 tier specifically, since that is the only size either fix actually changes
+	// anything for - bump again whenever a future change to what a 1400-tier thumbnail is
+	// generated from should invalidate what is already cached.
+	if(image.forceSize === 1400)
+		vars.push('coverflowSourceVersion=4');
+
 	return image.path+(vars.length ? '?'+vars.join('&') : '');
 }
 
 var data = false;
 
-function returnThumbnailsImages(images, callback, file = false)
+function returnThumbnailsImages(images, callback, file = false, jobKey = 'cacheMakeAvailable', jobOptions = {useThreads: 0.08, delay: 30})
 {
 	if(!data) data = storage.get('cache') || {};
 
@@ -258,8 +286,12 @@ function returnThumbnailsImages(images, callback, file = false)
 	if(toGenerateThumbnails.length > 0 && file)
 	{
 		// Thumbnail extraction is background work. At 0.2 threads with a 10ms delay it saturated
-		// the pool and starved the reader's own decode/extract jobs while browsing.
-		threads.job('cacheMakeAvailable', {useThreads: 0.08, delay: 30}, async function() {
+		// the pool and starved the reader's own decode/extract jobs while browsing. jobKey defaults
+		// to the shared grid/row queue every existing caller relies on; a caller that passes its own
+		// key (coverflow's collage, see coverflow.js) gets an independent queue lane instead - see
+		// threads.js, where queues/threadsList are both keyed by this string, so two keys never
+		// share concurrency or FIFO ordering with each other.
+		threads.job(jobKey, jobOptions, async function() {
 
 			await file.makeAvailable(toGenerateThumbnails, function(image) {
 

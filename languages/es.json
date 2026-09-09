@@ -30,6 +30,7 @@
 			"main": "Vista",
 			"module": "Cuadrícula",
 			"list": "Lista",
+			"coverflow": "",
 			"moduleSize": "Tamaño de la cuadrícula",
 			"fadeCompleted": "Atenuar completados",
 			"progressBar": "Mostrar barra de progreso",
