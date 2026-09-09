@@ -206,7 +206,7 @@ You can see the changes between versions in the [Changelog 📝](/CHANGELOG.md)
 
 ### Upstream
 
-The links below are **upstream OpenComic [`v1.7.7`](https://github.com/ollm/OpenComic/releases/tag/v1.7.7)**
+The links below are **upstream OpenComic [`v1.7.0`](https://github.com/ollm/OpenComic/releases/tag/v1.7.7)**
 and do *not* include anything described in [What's new](#whats-new).
 
 
