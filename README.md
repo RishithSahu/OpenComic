@@ -49,7 +49,7 @@ messy manga/manhwa library who want it to organise and read itself sensibly:
 
 ## What's new since v1.7.0
 
-Roughly 160 fork changes across `v1.7.0` → `v1.8.1`. The highlights:
+Roughly 160 fork changes across `v1.7.0` → `v1.8.3`. The highlights:
 
 ##### 📇 Manga-aware library
 
@@ -194,7 +194,7 @@ You can see the changes between versions in the [Changelog 📝](/CHANGELOG.md)
 
 ### This fork
 
-**[Releases — `v1.8.1`](https://github.com/RishithSahu/OpenComic/releases/latest)**
+**[Releases — `v1.8.3`](https://github.com/RishithSahu/OpenComic/releases/latest)**
 
 - **Windows x64**: NSIS installer. The build is unsigned, so Windows SmartScreen will warn the
   first time you run it — choose **More info ▸ Run anyway**.
