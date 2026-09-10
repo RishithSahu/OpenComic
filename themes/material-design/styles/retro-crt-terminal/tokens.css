@@ -1,0 +1,22 @@
+/* Retro CRT Terminal - green-phosphor monochrome: square corners, an instant digital snap, a
+monospace face, and a scanline texture. */
+.app.style-retro-crt-terminal {
+	--font-display: "Share Tech Mono", Consolas, monospace;
+	--shape-radius-control: 4px;
+	--shape-radius-button: 2px;
+	--shape-radius-button-compact: 2px;
+	--shape-radius-chip: 0px;
+	--shape-radius-thumb: 2px;
+	--shape-radius-thumb-native: 8px;
+	--shape-radius-nav-pill: 2px;
+	--shape-radius-nav-pill-fill: 2px;
+	--shape-radius-panel: 0px;
+	--shape-border-width: 1px;
+	--md-sys-motion-easing-standard: linear;
+	--md-sys-motion-easing-standard-decelerate: linear;
+	--md-sys-motion-easing-legacy: linear;
+	--surface-texture-image:
+		repeating-linear-gradient(0deg, rgba(60, 255, 130, 0.05) 0px, rgba(60, 255, 130, 0.05) 1px, transparent 1px, transparent 3px);
+	--surface-texture-size: auto;
+	--surface-texture-repeat: repeat;
+}

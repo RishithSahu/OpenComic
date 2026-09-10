@@ -1,4 +1,5 @@
 const allColors = require(p.join(appDir, 'themes/material-design/colors/all-colors.js'));
+const allStyles = require(p.join(appDir, 'themes/material-design/styles/all-styles.js'));
 
 function getColorTokens(color)
 {
@@ -29,6 +30,26 @@ function setColor(color)
 	storage.updateVar('config', 'themeColor', color);
 
 	titleBar.setColors();
+}
+
+// A style theme (themes/material-design/styles/<key>/tokens.css) layers shape, motion-easing,
+// display-font and background-texture tokens over whichever colour setColor() picked - see
+// colors/shape.css for the token vocabulary. Unlike colour, "none" is a real, selectable option
+// here (the app's original, untouched appearance - every one of these tokens' own fallback
+// value), so an empty style clears every style-* class instead of adding one.
+function setStyle(style)
+{
+	let app = document.querySelector('.app');
+
+	for(let key in allStyles.list)
+	{
+		app.classList.remove('style-' + allStyles.list[key]);
+	}
+
+	if(style)
+		app.classList.add('style-' + style);
+
+	storage.updateVar('config', 'themeStyle', style);
 }
 
 var nightMode;
@@ -84,6 +105,32 @@ function start()
 
 	handlebarsContext.themeColors = themeColors;
 
+	const activeStyle = config.themeStyle || '';
+	const styleThemes = [
+		{
+			key: '',
+			name: language.settings.theme.styleDefault || 'Default',
+			description: language.settings.theme.styleDefaultDescription || 'The app\'s original appearance.',
+			colors: ['#7c4dff', '#2dd4bf'],
+			active: !activeStyle,
+		},
+	];
+
+	for(let key in allStyles.list)
+	{
+		const style = allStyles.list[key];
+
+		styleThemes.push({
+			key: style,
+			name: allStyles.names[style] || style,
+			description: allStyles.descriptions[style] || '',
+			colors: allStyles.swatches[style] || ['#888', '#888'],
+			active: activeStyle === style,
+		});
+	}
+
+	handlebarsContext.styleThemes = styleThemes;
+
 	template.loadContentRight('theme.content.right.html', true);
 
 	gamepad.updateBrowsableItems('theme');
@@ -93,6 +140,7 @@ function start()
 
 module.exports = {
 	setColor: setColor,
+	setStyle: setStyle,
 	systemNightMode: systemNightMode,
 	start: start,
 };

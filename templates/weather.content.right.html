@@ -1,0 +1,38 @@
+<div class="settings-body body-medium">
+<h1 class="display-medium">Your library today</h1>
+<div class="theme-section-subtitle body-medium" style="padding-left: 24px;">A memorable overview, not real analytics - every number below is read straight off your existing reading history and metadata.</div>
+
+<div class="weather-grid">
+
+	<div class="weather-card weather-card-rain">
+		<div class="weather-card-icon">🌧</div>
+		<div class="weather-card-value">{{libraryWeather.unfinished}}</div>
+		<div class="weather-card-label">unfinished series</div>
+	</div>
+
+	<div class="weather-card weather-card-sun">
+		<div class="weather-card-icon">☀</div>
+		<div class="weather-card-value">{{libraryWeather.completedThisMonth}}</div>
+		<div class="weather-card-label">completed this month</div>
+	</div>
+
+	<div class="weather-card weather-card-fire">
+		<div class="weather-card-icon">🔥</div>
+		<div class="weather-card-value">{{libraryWeather.activelyReading}}</div>
+		<div class="weather-card-label">actively reading</div>
+	</div>
+
+	<div class="weather-card weather-card-frost">
+		<div class="weather-card-icon">❄</div>
+		<div class="weather-card-value">{{libraryWeather.untouchedOverYear}}</div>
+		<div class="weather-card-label">untouched for &gt;1 year</div>
+	</div>
+
+	<div class="weather-card weather-card-warning">
+		<div class="weather-card-icon">⚠</div>
+		<div class="weather-card-value">{{libraryWeather.missingMetadata}}</div>
+		<div class="weather-card-label">missing metadata</div>
+	</div>
+
+</div>
+</div>

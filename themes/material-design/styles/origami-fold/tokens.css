@@ -1,0 +1,23 @@
+/* Origami Fold - paper-craft: crisp low-radius geometric shapes, a sharp fold-snap motion, a
+geometric display face, a faceted diagonal-fold texture. */
+.app.style-origami-fold {
+	--font-display: "Josefin Sans", "Segoe UI", sans-serif;
+	--shape-radius-control: 10px;
+	--shape-radius-button: 4px;
+	--shape-radius-button-compact: 4px;
+	--shape-radius-chip: 2px;
+	--shape-radius-thumb: 4px;
+	--shape-radius-thumb-native: 20px;
+	--shape-radius-nav-pill: 4px;
+	--shape-radius-nav-pill-fill: 4px;
+	--shape-radius-panel: 2px;
+	--shape-border-width: 1px;
+	--md-sys-motion-easing-standard: cubic-bezier(0.7, 0, 0.15, 1);
+	--md-sys-motion-easing-standard-decelerate: cubic-bezier(0.2, 0.5, 0.1, 1);
+	--md-sys-motion-easing-legacy: cubic-bezier(0.7, 0, 0.15, 1);
+	--surface-texture-image:
+		linear-gradient(135deg, rgba(255, 255, 255, 0.04) 0%, transparent 50%, rgba(0, 0, 0, 0.05) 100%),
+		linear-gradient(45deg, transparent 48%, rgba(255, 255, 255, 0.04) 50%, transparent 52%);
+	--surface-texture-size: 140px 140px, auto;
+	--surface-texture-repeat: repeat, no-repeat;
+}

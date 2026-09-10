@@ -1,4 +1,6 @@
 {{#if folderMetadataTop}}
+
+{{#if folderMetadataTop.isGeneric}}
 <div class="folder-metadata-top">
 	<div class="label-large folder-metadata-top-kicker">Series</div>
 	<div class="folder-metadata-top-title">{{folderMetadataTop.title}}</div>
@@ -12,6 +14,67 @@
 	{{/if}}
 	{{#if folderMetadataTop.description}}<div class="folder-metadata-top-description">{{folderMetadataTop.description}}</div>{{/if}}
 </div>
+{{/if}}
+
+{{#if folderMetadataTop.isManga}}
+<div class="folder-format-obi">
+	<div class="obi-kanji-mark">巻</div>
+	<div class="obi-eyebrow">Tankōbon Series</div>
+	<div class="obi-title">{{folderMetadataTop.title}}</div>
+	{{#if folderMetadataTop.subname}}<div class="obi-meta">{{folderMetadataTop.subname}}</div>{{/if}}
+	{{#if folderMetadataTop.genres}}
+	<div class="obi-band">
+		<div class="obi-genres">
+			{{#each folderMetadataTop.genres}}<span data-genre="{{this}}" onclick="dom.filterByGenre(this.dataset.genre, event);">{{this}}</span>{{/each}}
+		</div>
+		{{#if folderMetadataTop.rating}}<div class="obi-rating">{{folderMetadataTop.rating}}</div>{{/if}}
+	</div>
+	{{/if}}
+	{{#if folderMetadataTop.description}}
+	<div class="obi-body"><div class="obi-frame"><div class="obi-desc">{{folderMetadataTop.description}}</div></div></div>
+	{{/if}}
+</div>
+{{/if}}
+
+{{#if folderMetadataTop.isManhua}}
+<div class="folder-format-hybrid">
+	<div class="hybrid-brocade"></div>
+	<div class="hybrid-top">
+		<div class="hybrid-seal">卷</div>
+		<div class="hybrid-title">{{folderMetadataTop.title}}</div>
+	</div>
+	<div class="hybrid-body">
+		<div class="hybrid-badge">✦ Cultivation Record</div>
+		{{#if folderMetadataTop.subname}}<div class="hybrid-meta">{{folderMetadataTop.subname}}</div>{{/if}}
+		{{#if folderMetadataTop.rating}}
+		<div class="hybrid-meter"><div class="hybrid-meter-fill" style="width: {{folderMetadataTop.ratingValue}}%;"></div></div>
+		<div class="hybrid-meter-label">CULTIVATION SCORE &middot; {{folderMetadataTop.ratingValue}}/100</div>
+		{{/if}}
+		{{#if folderMetadataTop.genres}}
+		<div class="hybrid-tokens">
+			{{#each folderMetadataTop.genres}}<span data-genre="{{this}}" onclick="dom.filterByGenre(this.dataset.genre, event);">{{this}}</span>{{/each}}
+		</div>
+		{{/if}}
+		{{#if folderMetadataTop.description}}<div class="hybrid-desc">{{folderMetadataTop.description}}</div>{{/if}}
+	</div>
+</div>
+{{/if}}
+
+{{#if folderMetadataTop.isManhwa}}
+<div class="folder-format-glitch">
+	<div class="glitch-noise"></div>
+	{{#if folderMetadataTop.year}}<div class="glitch-time">[TRACKED &middot; {{folderMetadataTop.year}}]</div>{{/if}}
+	<div class="glitch-title" data-text="{{folderMetadataTop.title}}">{{folderMetadataTop.title}}</div>
+	{{#if folderMetadataTop.subname}}<div class="glitch-meta">{{folderMetadataTop.subname}}</div>{{/if}}
+	{{#if folderMetadataTop.genres}}
+	<div class="glitch-chips">
+		{{#each folderMetadataTop.genres}}<span data-genre="{{this}}" onclick="dom.filterByGenre(this.dataset.genre, event);">{{this}}</span>{{/each}}
+	</div>
+	{{/if}}
+	{{#if folderMetadataTop.description}}<div class="glitch-desc">{{folderMetadataTop.description}}</div>{{/if}}
+</div>
+{{/if}}
+
 {{/if}}
 
 <div class="continue-reading-list{{#if comicsReadingProgress}}{{#if comicsReadingProgressCurrentPath}} continue-reading-list-double{{/if}}{{/if}}">

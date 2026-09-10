@@ -1,0 +1,10 @@
+<div class="constellation-page">
+{{#if constellationEmpty}}
+<div class="constellation-empty body-medium">No series with tracked metadata yet - genres are what place a series on the map, so nothing has anywhere to go until metadata fetch has matched at least a few.</div>
+{{else}}
+<div class="constellation-hint body-small">Scroll to zoom, drag to pan, click a series to open it. Distance is genre similarity - closer series share more genres.</div>
+<div class="constellation-canvas">
+{{{constellationSvg}}}
+</div>
+{{/if}}
+</div>

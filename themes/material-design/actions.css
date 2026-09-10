@@ -9,7 +9,7 @@
 
 .floating-action-button
 {
-	border-radius: 16px;
+	border-radius: var(--shape-radius-panel, 16px);
 	height: 56px;
 	width: 56px;
 	position: fixed;
@@ -1473,7 +1473,7 @@
 	height: 36px;
 	width: 100%;
 	line-height: 36px;
-	border-radius: 36px;
+	border-radius: var(--shape-radius-button-compact, 36px);
 	border: 0px;
 	padding: 0px 16px;
 	box-sizing: border-box;
@@ -1499,7 +1499,7 @@
 {
 	height: 40px;
 	line-height: 40px;
-	border-radius: 40px;
+	border-radius: var(--shape-radius-button, 40px);
 	padding: 0px 24px;
 	transition: 0.2s var(--md-sys-motion-easing-standard-decelerate);
 }
@@ -1574,7 +1574,7 @@
 .simple-button-square.simple-button.filled > div,
 .simple-button-square.simple-button.filled-tonal > div
 {
-	border-radius: 8px;
+	border-radius: var(--shape-radius-chip, 8px);
 }
 
 /* Button Progress */
@@ -1631,8 +1631,8 @@
 	width: 52px;
 	height: 32px;
 	margin-top: -9px;
-	border-radius: 32px;
-	border: 2px solid var(--md-sys-color-outline);
+	border-radius: var(--shape-radius-control, 32px);
+	border: var(--shape-border-width, 2px) solid var(--md-sys-color-outline);
 	background-color: var(--md-sys-color-surface-container-highest);
 	transition: 0.2s var(--md-sys-motion-easing-legacy);
 	margin-left: -19px;
@@ -2046,7 +2046,7 @@
 {
 	height: 20px;
 	width: 20px;
-	border-radius: 20px;
+	border-radius: var(--shape-radius-thumb, 20px);
 	background-color: var(--md-sys-color-primary);
 }
 
@@ -2094,7 +2094,7 @@
 	background: var(--md-sys-color-primary);
 	height: 20px;
 	width: 20px;
-	border-radius: 100px;
+	border-radius: var(--shape-radius-thumb-native, 100px);
 	outline: 0px;
 	transition: 0.2s;
 	border: 0px solid #fff;

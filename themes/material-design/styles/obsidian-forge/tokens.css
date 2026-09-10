@@ -1,0 +1,23 @@
+/* Obsidian Forge - molten/volcanic: heavy engraved display face, sharp low-radius shapes, a
+slow pulsing motion like cooling lava, ember-orange glow veins. */
+.app.style-obsidian-forge {
+	--font-display: "Cinzel", Georgia, serif;
+	--shape-radius-control: 12px;
+	--shape-radius-button: 4px;
+	--shape-radius-button-compact: 4px;
+	--shape-radius-chip: 2px;
+	--shape-radius-thumb: 4px;
+	--shape-radius-thumb-native: 20px;
+	--shape-radius-nav-pill: 4px;
+	--shape-radius-nav-pill-fill: 4px;
+	--shape-radius-panel: 2px;
+	--shape-border-width: 2px;
+	--md-sys-motion-easing-standard: cubic-bezier(0.5, 0, 0.3, 1);
+	--md-sys-motion-easing-standard-decelerate: cubic-bezier(0.2, 0.5, 0.1, 1);
+	--md-sys-motion-easing-legacy: cubic-bezier(0.5, 0, 0.3, 1);
+	--surface-texture-image:
+		radial-gradient(circle at 15% 90%, rgba(255, 110, 30, 0.16), transparent 40%),
+		radial-gradient(circle at 85% 15%, rgba(255, 80, 20, 0.1), transparent 42%);
+	--surface-texture-size: auto;
+	--surface-texture-repeat: no-repeat;
+}

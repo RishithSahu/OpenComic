@@ -127,6 +127,12 @@ const storageDefault = {
 		language: 'en',
 		theme: 'material-design',
 		themeColor: 'blue',
+		// A style theme (theme.js's setStyle(), themes/material-design/styles/) layers shape,
+		// texture, motion-easing and display-font tokens on top of whichever colour is picked -
+		// empty means none selected, matching the app's original untouched appearance (still the
+		// baseline every style's own tokens fall back to, so nothing here can leave the app in a
+		// broken/unstyled state).
+		themeStyle: '',
 		nightMode: false,
 		nightModeBlackBackground: false,
 		nightModeWhiteBlankPage: false,

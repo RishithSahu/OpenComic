@@ -1,0 +1,8 @@
+  • electron-builder  version=26.7.0 os=10.0.26200
+  • loaded configuration  file=package.json ("build" field)
+  • building        target=nsis file=dist\OpenComic Setup 1.8.3.exe archs=x64 oneClick=false perMachine=false
+  • signing with signtool.exe  path=dist\win-unpacked\resources\elevate.exe
+  • signing with signtool.exe  path=dist\OpenComic Setup 1.8.3.__uninstaller.exe
+  • signing with signtool.exe  path=dist\OpenComic Setup 1.8.3.exe
+  • building        target=portable file=dist\OpenComic 1.8.3.exe archs=x64
+  • signing with signtool.exe  path=dist\OpenComic 1.8.3.exe

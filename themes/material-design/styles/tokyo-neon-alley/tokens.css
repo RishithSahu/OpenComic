@@ -1,0 +1,24 @@
+/* Tokyo Neon Alley - cyberpunk night street: sharp glass edges, a fast mechanical snap instead
+of a soft ease, a techy display face. */
+.app.style-tokyo-neon-alley {
+	--font-display: "Orbitron", "Segoe UI", sans-serif;
+	--shape-radius-control: 20px;
+	--shape-radius-button: 10px;
+	--shape-radius-button-compact: 8px;
+	--shape-radius-chip: 4px;
+	--shape-radius-thumb: 20px;
+	--shape-radius-thumb-native: 100px;
+	--shape-radius-nav-pill: 8px;
+	--shape-radius-nav-pill-fill: 8px;
+	--shape-radius-panel: 4px;
+	--shape-border-width: 1px;
+	--md-sys-motion-easing-standard: cubic-bezier(0.83, 0, 0.17, 1);
+	--md-sys-motion-easing-standard-decelerate: cubic-bezier(0.1, 0.9, 0.2, 1);
+	--md-sys-motion-easing-legacy: cubic-bezier(0.83, 0, 0.17, 1);
+	--surface-texture-image:
+		radial-gradient(circle at 92% 8%, rgba(255, 47, 161, 0.16), transparent 42%),
+		radial-gradient(circle at 6% 30%, rgba(56, 217, 255, 0.14), transparent 45%),
+		linear-gradient(0deg, rgba(255, 47, 161, 0.05) 0%, transparent 30%);
+	--surface-texture-size: auto;
+	--surface-texture-repeat: no-repeat;
+}

@@ -1,0 +1,23 @@
+/* Risograph Print - indie zine printing: bold flat low-radius shapes, a snappy playful motion,
+a heavy flat-print display face, a grainy flat-colour fill standing in for riso-print grain. */
+.app.style-risograph-print {
+	--font-display: "Archivo Black", Impact, sans-serif;
+	--shape-radius-control: 10px;
+	--shape-radius-button: 6px;
+	--shape-radius-button-compact: 6px;
+	--shape-radius-chip: 4px;
+	--shape-radius-thumb: 6px;
+	--shape-radius-thumb-native: 30px;
+	--shape-radius-nav-pill: 6px;
+	--shape-radius-nav-pill-fill: 6px;
+	--shape-radius-panel: 4px;
+	--shape-border-width: 2px;
+	--md-sys-motion-easing-standard: cubic-bezier(0.2, 1.1, 0.3, 1);
+	--md-sys-motion-easing-standard-decelerate: cubic-bezier(0.1, 0.8, 0.15, 1);
+	--md-sys-motion-easing-legacy: cubic-bezier(0.2, 1.1, 0.3, 1);
+	--surface-texture-image:
+		radial-gradient(rgba(255, 90, 140, 0.06) 1.4px, transparent 1.6px),
+		radial-gradient(rgba(60, 170, 255, 0.05) 1.4px, transparent 1.6px);
+	--surface-texture-size: 6px 6px, 7px 7px;
+	--surface-texture-repeat: repeat, repeat;
+}

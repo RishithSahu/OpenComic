@@ -1,0 +1,23 @@
+/* Terrarium - living/organic: everything soft and rounded like a leaf edge, a gentle
+overshooting motion (a stem settling after being brushed), a friendly rounded face. */
+.app.style-terrarium {
+	--font-display: "Quicksand", "Segoe UI", sans-serif;
+	--shape-radius-control: 32px;
+	--shape-radius-button: 999px;
+	--shape-radius-button-compact: 999px;
+	--shape-radius-chip: 999px;
+	--shape-radius-thumb: 20px;
+	--shape-radius-thumb-native: 100px;
+	--shape-radius-nav-pill: 999px;
+	--shape-radius-nav-pill-fill: 999px;
+	--shape-radius-panel: 28px;
+	--shape-border-width: 1px;
+	--md-sys-motion-easing-standard: cubic-bezier(0.34, 1.56, 0.64, 1);
+	--md-sys-motion-easing-standard-decelerate: cubic-bezier(0.3, 1.4, 0.5, 1);
+	--md-sys-motion-easing-legacy: cubic-bezier(0.34, 1.4, 0.64, 1);
+	--surface-texture-image:
+		radial-gradient(circle at 10% 15%, rgba(76, 175, 100, 0.14), transparent 46%),
+		radial-gradient(circle at 88% 82%, rgba(101, 140, 70, 0.14), transparent 48%);
+	--surface-texture-size: auto;
+	--surface-texture-repeat: no-repeat;
+}

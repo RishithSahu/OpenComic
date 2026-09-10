@@ -69,6 +69,16 @@
 		{{language.global.theme}}
 	</div>
 
+	<div class="menu-item menu-item-weather body-medium gamepad-item{{#compare isFrom '==' 'weather'}} active{{/compare}}" onclick="dom.loadWeatherPage();" onmousedown="dom.labels.middleClick(event, 'page', 'weather')" hover-text="Library Weather">
+		<div class="icon-24 material-icon">cloud</div>
+		Library Weather
+	</div>
+
+	<div class="menu-item menu-item-constellation body-medium gamepad-item{{#compare isFrom '==' 'constellation'}} active{{/compare}}" onclick="dom.loadConstellationPage();" onmousedown="dom.labels.middleClick(event, 'page', 'constellation')" hover-text="Constellation">
+		<div class="icon-24 material-icon">hub</div>
+		Constellation
+	</div>
+
 	<div class="menu-item menu-item-settings body-medium gamepad-item{{#compare isFrom '==' 'settings'}} active{{/compare}}" onclick="dom.loadSettingsPage();" onmousedown="dom.labels.middleClick(event, 'page', 'settings')" hover-text="{{language.global.settings}}">
 		<div class="icon-24 material-icon">settings</div>
 		{{language.global.settings}}

@@ -142,7 +142,24 @@ function createDefaultFolderMetadata()
 		// folder AniList has never matched still gets a durable record that it was tried, and
 		// needsMetadataScrape() (tracking.js) can leave it alone for a while instead of
 		// re-querying it on every single app launch forever.
+		// Set when seriesType was picked explicitly by the user (the folder-context-menu "Set
+		// format" action, tracking.setFolderSeriesType()) rather than inferred from AniList/MAL
+		// metadata. A future scrape/refetch preserves seriesType while this is true instead of
+		// overwriting it with whatever the matched site's own classification says - metadata
+		// fetch sometimes gets this wrong (or a title simply isn't classified consistently across
+		// sites), and there would otherwise be no way to make a correction stick.
+		seriesTypeManual: false,
 		lastAttemptAt: 0,
+		// Which build of the matching/search logic `lastAttemptAt` was recorded under
+		// (METADATA_SCRAPE_LOGIC_VERSION, tracking.js) - a "no match" from before a real bug fix
+		// to that logic (a title-mangling bug, a request that was silently hanging instead of
+		// failing) is not evidence the folder still will not match under the fixed logic, so
+		// needsMetadataScrape() only honours the durable cooldown above when this matches the
+		// current version; a record from an older version (or one that predates this field
+		// existing at all, defaulting to 0) is retried immediately instead of staying silently
+		// stuck for up to 21 days on a conclusion the current code was never actually responsible
+		// for.
+		scrapeAttemptVersion: 0,
 	};
 }
 
@@ -179,6 +196,8 @@ function sanitizeFolderMetadata(input = {}, now = Date.now())
 	metadata.createdAt = createdAt || (now || 0);
 	metadata.updatedAt = updatedAt || (now || metadata.createdAt);
 	metadata.lastAttemptAt = normalizeInteger(input.lastAttemptAt, 0);
+	metadata.scrapeAttemptVersion = normalizeInteger(input.scrapeAttemptVersion, 0);
+	metadata.seriesTypeManual = !!input.seriesTypeManual;
 
 	return metadata;
 }

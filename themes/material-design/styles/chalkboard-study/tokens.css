@@ -1,0 +1,22 @@
+/* Chalkboard Study - classroom nostalgia: soft chalk-drawn corners, a slightly loose motion, a
+genuine hand-drawn face (earned here the way Watercolor Bleed earns it), a chalky speckle. */
+.app.style-chalkboard-study {
+	--font-display: "Architects Daughter", cursive;
+	--shape-radius-control: 18px;
+	--shape-radius-button: 10px;
+	--shape-radius-button-compact: 10px;
+	--shape-radius-chip: 6px;
+	--shape-radius-thumb: 16px;
+	--shape-radius-thumb-native: 80px;
+	--shape-radius-nav-pill: 10px;
+	--shape-radius-nav-pill-fill: 10px;
+	--shape-radius-panel: 10px;
+	--shape-border-width: 1px;
+	--md-sys-motion-easing-standard: cubic-bezier(0.35, 0.8, 0.35, 1.05);
+	--md-sys-motion-easing-standard-decelerate: cubic-bezier(0.2, 0.7, 0.2, 1);
+	--md-sys-motion-easing-legacy: cubic-bezier(0.35, 0.8, 0.35, 1.05);
+	--surface-texture-image:
+		radial-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1.2px);
+	--surface-texture-size: 4px 4px;
+	--surface-texture-repeat: repeat;
+}

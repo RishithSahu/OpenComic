@@ -1,0 +1,24 @@
+/* Watercolor Bleed - soft artistic: irregular soft-bleed blooms, a slightly imprecise wobble
+easing, a genuine hand-drawn face (contextually earned here, unlike most UI). */
+.app.style-watercolor-bleed {
+	--font-display: "Caveat", cursive;
+	--shape-radius-control: 26px;
+	--shape-radius-button: 18px;
+	--shape-radius-button-compact: 16px;
+	--shape-radius-chip: 10px;
+	--shape-radius-thumb: 18px;
+	--shape-radius-thumb-native: 90px;
+	--shape-radius-nav-pill: 18px;
+	--shape-radius-nav-pill-fill: 18px;
+	--shape-radius-panel: 18px;
+	--shape-border-width: 1px;
+	--md-sys-motion-easing-standard: cubic-bezier(0.3, 0.9, 0.4, 1.1);
+	--md-sys-motion-easing-standard-decelerate: cubic-bezier(0.2, 0.8, 0.3, 1);
+	--md-sys-motion-easing-legacy: cubic-bezier(0.3, 0.9, 0.4, 1.05);
+	--surface-texture-image:
+		radial-gradient(ellipse 38% 28% at 10% 14%, rgba(90, 130, 200, 0.14), transparent 68%),
+		radial-gradient(ellipse 50% 32% at 88% 80%, rgba(200, 110, 130, 0.12), transparent 68%),
+		radial-gradient(ellipse 22% 30% at 65% 20%, rgba(230, 180, 90, 0.1), transparent 72%);
+	--surface-texture-size: auto;
+	--surface-texture-repeat: no-repeat;
+}

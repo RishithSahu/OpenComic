@@ -1,0 +1,22 @@
+/* Frosted Glacier - icy minimal: thin hairline weight, crisp cool motion, a clean modern face,
+and a faint frost-speckle instead of a gradient bloom. */
+.app.style-frosted-glacier {
+	--font-display: "Poppins", "Segoe UI", sans-serif;
+	--shape-radius-control: 28px;
+	--shape-radius-button: 14px;
+	--shape-radius-button-compact: 12px;
+	--shape-radius-chip: 8px;
+	--shape-radius-thumb: 20px;
+	--shape-radius-thumb-native: 100px;
+	--shape-radius-nav-pill: 14px;
+	--shape-radius-nav-pill-fill: 14px;
+	--shape-radius-panel: 12px;
+	--shape-border-width: 1px;
+	--md-sys-motion-easing-standard: cubic-bezier(0.2, 0.6, 0.1, 1);
+	--md-sys-motion-easing-standard-decelerate: cubic-bezier(0.1, 0.7, 0.1, 1);
+	--md-sys-motion-easing-legacy: cubic-bezier(0.2, 0.6, 0.1, 1);
+	--surface-texture-image:
+		radial-gradient(rgba(210, 235, 255, 0.1) 1px, transparent 1.2px);
+	--surface-texture-size: 6px 6px;
+	--surface-texture-repeat: repeat;
+}

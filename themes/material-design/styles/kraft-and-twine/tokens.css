@@ -1,0 +1,22 @@
+/* Kraft & Twine - analog stationery/zine: a typewriter face, matte flat corners (no glossy
+rounding), an unhurried, slightly imprecise motion. */
+.app.style-kraft-and-twine {
+	--font-display: "Special Elite", Courier, monospace;
+	--shape-radius-control: 4px;
+	--shape-radius-button: 3px;
+	--shape-radius-button-compact: 3px;
+	--shape-radius-chip: 2px;
+	--shape-radius-thumb: 3px;
+	--shape-radius-thumb-native: 20px;
+	--shape-radius-nav-pill: 4px;
+	--shape-radius-nav-pill-fill: 4px;
+	--shape-radius-panel: 3px;
+	--shape-border-width: 1px;
+	--md-sys-motion-easing-standard: cubic-bezier(0.4, 0.1, 0.3, 1);
+	--md-sys-motion-easing-standard-decelerate: cubic-bezier(0.2, 0.3, 0.1, 1);
+	--md-sys-motion-easing-legacy: cubic-bezier(0.4, 0.1, 0.3, 1);
+	--surface-texture-image:
+		radial-gradient(rgba(120, 96, 60, 0.09) 1px, transparent 1.3px);
+	--surface-texture-size: 5px 5px;
+	--surface-texture-repeat: repeat;
+}

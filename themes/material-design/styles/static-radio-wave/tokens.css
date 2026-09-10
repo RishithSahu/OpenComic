@@ -1,0 +1,22 @@
+/* Static Radio Wave - analog broadcast: rounded dial-like controls, a warm crackly-feeling
+snap, a condensed broadcast face, an amber dial-glow. */
+.app.style-static-radio-wave {
+	--font-display: "Bebas Neue", Impact, sans-serif;
+	--shape-radius-control: 999px;
+	--shape-radius-button: 999px;
+	--shape-radius-button-compact: 999px;
+	--shape-radius-chip: 999px;
+	--shape-radius-thumb: 20px;
+	--shape-radius-thumb-native: 100px;
+	--shape-radius-nav-pill: 999px;
+	--shape-radius-nav-pill-fill: 999px;
+	--shape-radius-panel: 14px;
+	--shape-border-width: 2px;
+	--md-sys-motion-easing-standard: cubic-bezier(0.2, 0.9, 0.3, 1.02);
+	--md-sys-motion-easing-standard-decelerate: cubic-bezier(0.1, 0.7, 0.15, 1);
+	--md-sys-motion-easing-legacy: cubic-bezier(0.2, 0.9, 0.3, 1.02);
+	--surface-texture-image:
+		radial-gradient(circle at 90% 85%, rgba(255, 180, 60, 0.16), transparent 44%);
+	--surface-texture-size: auto;
+	--surface-texture-repeat: no-repeat;
+}

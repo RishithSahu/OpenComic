@@ -1,0 +1,22 @@
+/* Woodblock Press - nianhua/ukiyo-e folk print: thick square-cut corners, a heavy slab display
+face, and a grainy dot-fill standing in for rough paper. */
+.app.style-woodblock-press {
+	--font-display: "Roboto Slab", Georgia, serif;
+	--shape-radius-control: 2px;
+	--shape-radius-button: 2px;
+	--shape-radius-button-compact: 2px;
+	--shape-radius-chip: 0px;
+	--shape-radius-thumb: 3px;
+	--shape-radius-thumb-native: 15px;
+	--shape-radius-nav-pill: 2px;
+	--shape-radius-nav-pill-fill: 2px;
+	--shape-radius-panel: 0px;
+	--shape-border-width: 3px;
+	--md-sys-motion-easing-standard: cubic-bezier(0.6, 0, 0.3, 1);
+	--md-sys-motion-easing-standard-decelerate: cubic-bezier(0.2, 0.4, 0.1, 1);
+	--md-sys-motion-easing-legacy: cubic-bezier(0.6, 0, 0.3, 1);
+	--surface-texture-image:
+		radial-gradient(rgba(20, 16, 10, 0.1) 1.1px, transparent 1.3px);
+	--surface-texture-size: 4px 4px;
+	--surface-texture-repeat: repeat;
+}

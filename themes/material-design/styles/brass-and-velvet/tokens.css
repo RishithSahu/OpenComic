@@ -1,0 +1,23 @@
+/* Brass & Velvet - a vintage study: moderate ornate curves, a heavier border standing in for
+metal trim, a slow stately motion, an elegant display serif. */
+.app.style-brass-and-velvet {
+	--font-display: "Playfair Display", Georgia, serif;
+	--shape-radius-control: 24px;
+	--shape-radius-button: 6px;
+	--shape-radius-button-compact: 6px;
+	--shape-radius-chip: 4px;
+	--shape-radius-thumb: 20px;
+	--shape-radius-thumb-native: 100px;
+	--shape-radius-nav-pill: 6px;
+	--shape-radius-nav-pill-fill: 6px;
+	--shape-radius-panel: 8px;
+	--shape-border-width: 2px;
+	--md-sys-motion-easing-standard: cubic-bezier(0.65, 0, 0.35, 1);
+	--md-sys-motion-easing-standard-decelerate: cubic-bezier(0.2, 0.4, 0.1, 1);
+	--md-sys-motion-easing-legacy: cubic-bezier(0.65, 0, 0.35, 1);
+	--surface-texture-image:
+		radial-gradient(circle at 50% 0%, rgba(140, 40, 60, 0.14), transparent 55%),
+		radial-gradient(circle at 8% 100%, rgba(120, 90, 30, 0.1), transparent 50%);
+	--surface-texture-size: auto;
+	--surface-texture-repeat: no-repeat;
+}

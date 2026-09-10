@@ -1,0 +1,67 @@
+/* Library Weather - see scripts/weather.js. A deliberately unserious dashboard, styled to
+match (big mood icon, big number, no chrome trying to look like a real analytics tool). */
+
+.weather-grid
+{
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+	gap: 16px;
+	padding: 20px 24px 60px 24px;
+}
+
+.weather-card
+{
+	border-radius: var(--shape-radius-panel, 16px);
+	background-color: var(--md-sys-color-surface-container-low);
+	border: 1px solid var(--md-sys-color-outline-variant);
+	padding: 22px 20px;
+	position: relative;
+	overflow: hidden;
+	transition: transform 0.2s var(--md-sys-motion-easing-standard-decelerate), box-shadow 0.2s;
+}
+
+.weather-card:hover
+{
+	transform: translateY(-2px);
+	box-shadow: var(--md-sys-elevation-level1);
+}
+
+.weather-card-icon
+{
+	font-size: 30px;
+	line-height: 1;
+	margin-bottom: 14px;
+	filter: grayscale(0);
+}
+
+.weather-card-value
+{
+	font-family: var(--font-display, inherit);
+	font-size: 40px;
+	font-weight: 700;
+	line-height: 1;
+	margin-bottom: 6px;
+	color: var(--md-sys-color-on-surface);
+}
+
+.weather-card-label
+{
+	color: var(--md-sys-color-on-surface-variant);
+	font-size: 13px;
+}
+
+.weather-card:before
+{
+	content: '';
+	position: absolute;
+	top: 0px;
+	left: 0px;
+	width: 4px;
+	height: 100%;
+}
+
+.weather-card-rain:before { background: #5b8ee8; }
+.weather-card-sun:before { background: #f0b429; }
+.weather-card-fire:before { background: #e85b3a; }
+.weather-card-frost:before { background: #5bd0e8; }
+.weather-card-warning:before { background: #e8555b; }

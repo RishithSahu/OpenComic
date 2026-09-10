@@ -1,0 +1,23 @@
+/* Autumn Ledger - a cozy fall library: warm rounded-but-bookish shapes, an unhurried motion, a
+warm ledger serif, and a soft leaf-toned bloom. */
+.app.style-autumn-ledger {
+	--font-display: "Bitter", Georgia, serif;
+	--shape-radius-control: 20px;
+	--shape-radius-button: 8px;
+	--shape-radius-button-compact: 8px;
+	--shape-radius-chip: 4px;
+	--shape-radius-thumb: 18px;
+	--shape-radius-thumb-native: 90px;
+	--shape-radius-nav-pill: 8px;
+	--shape-radius-nav-pill-fill: 8px;
+	--shape-radius-panel: 8px;
+	--shape-border-width: 1px;
+	--md-sys-motion-easing-standard: cubic-bezier(0.4, 0.1, 0.3, 1);
+	--md-sys-motion-easing-standard-decelerate: cubic-bezier(0.2, 0.4, 0.15, 1);
+	--md-sys-motion-easing-legacy: cubic-bezier(0.4, 0.1, 0.3, 1);
+	--surface-texture-image:
+		radial-gradient(circle at 12% 90%, rgba(200, 110, 40, 0.14), transparent 42%),
+		radial-gradient(circle at 90% 10%, rgba(160, 90, 40, 0.1), transparent 44%);
+	--surface-texture-size: auto;
+	--surface-texture-repeat: no-repeat;
+}

@@ -1,0 +1,22 @@
+/* Velvet Noir - film-noir detective: hard-edged low radii, a slow moody motion, a condensed
+dramatic display face, and a venetian-blind shadow-stripe. */
+.app.style-velvet-noir {
+	--font-display: "Oswald", Impact, sans-serif;
+	--shape-radius-control: 14px;
+	--shape-radius-button: 2px;
+	--shape-radius-button-compact: 2px;
+	--shape-radius-chip: 0px;
+	--shape-radius-thumb: 4px;
+	--shape-radius-thumb-native: 20px;
+	--shape-radius-nav-pill: 2px;
+	--shape-radius-nav-pill-fill: 2px;
+	--shape-radius-panel: 0px;
+	--shape-border-width: 1px;
+	--md-sys-motion-easing-standard: cubic-bezier(0.6, 0, 0.4, 1);
+	--md-sys-motion-easing-standard-decelerate: cubic-bezier(0.2, 0.5, 0.1, 1);
+	--md-sys-motion-easing-legacy: cubic-bezier(0.6, 0, 0.4, 1);
+	--surface-texture-image:
+		repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.22) 0px, rgba(0, 0, 0, 0.22) 6px, transparent 6px, transparent 18px);
+	--surface-texture-size: auto;
+	--surface-texture-repeat: repeat;
+}

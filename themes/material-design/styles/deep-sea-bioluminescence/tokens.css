@@ -1,0 +1,24 @@
+/* Deep Sea Bioluminescence - near-black ocean depths: everything soft and jellyfish-rounded,
+a slow pulsing glow motion, glowing teal/violet blooms standing in for bioluminescence. */
+.app.style-deep-sea-bioluminescence {
+	--font-display: "Comfortaa", "Segoe UI", sans-serif;
+	--shape-radius-control: 32px;
+	--shape-radius-button: 999px;
+	--shape-radius-button-compact: 999px;
+	--shape-radius-chip: 999px;
+	--shape-radius-thumb: 20px;
+	--shape-radius-thumb-native: 100px;
+	--shape-radius-nav-pill: 999px;
+	--shape-radius-nav-pill-fill: 999px;
+	--shape-radius-panel: 26px;
+	--shape-border-width: 1px;
+	--md-sys-motion-easing-standard: cubic-bezier(0.3, 0.05, 0.2, 1);
+	--md-sys-motion-easing-standard-decelerate: cubic-bezier(0.1, 0.5, 0.15, 1);
+	--md-sys-motion-easing-legacy: cubic-bezier(0.3, 0.05, 0.2, 1);
+	--surface-texture-image:
+		radial-gradient(circle at 20% 80%, rgba(45, 212, 191, 0.2), transparent 40%),
+		radial-gradient(circle at 78% 30%, rgba(150, 80, 255, 0.16), transparent 42%),
+		radial-gradient(circle at 50% 55%, rgba(45, 150, 220, 0.08), transparent 55%);
+	--surface-texture-size: auto;
+	--surface-texture-repeat: no-repeat;
+}

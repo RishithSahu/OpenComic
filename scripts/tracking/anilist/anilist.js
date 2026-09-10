@@ -63,6 +63,16 @@ async function _queuedRequest(request)
 	return promise;
 }
 
+// Bounds a single attempt's connect+response time. Without this, an AniList outage that drops
+// the connection instead of answering with a 403 (a DNS failure, a connection that never
+// completes) relied entirely on the OS's own TCP timeout, which on Windows defaults to 21+
+// seconds - and, unlike a 403, never set _rateLimitedUntil at all (see the catch block below),
+// so nothing here ever told scrapeFolderMetadata() (tracking.js) to skip AniList and go straight
+// to MyAnimeList. Every folder in the scrape queue paid that full OS timeout, up to 3 retries
+// deep, one at a time - measured as roughly a minute per folder, indistinguishable from the
+// queue simply not doing anything.
+const _requestTimeoutMs = 8000;
+
 async function _graphQLFetch(body, headers = {}, retries = 3, signal = null)
 {
 	const options = {
@@ -71,8 +81,8 @@ async function _graphQLFetch(body, headers = {}, retries = 3, signal = null)
 		body: JSON.stringify(body),
 	};
 
-	if (signal)
-		options.signal = signal;
+	const timeoutSignal = AbortSignal.timeout(_requestTimeoutMs);
+	options.signal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
 
 	try {
 		const response = await _queuedRequest(function() {
@@ -120,13 +130,23 @@ async function _graphQLFetch(body, headers = {}, retries = 3, signal = null)
 
 		return response;
 	} catch (err) {
-		if(err && err.name === 'AbortError')
+		// A user-initiated cancel (typing a new search - see the controller.abort() at the top of
+		// searchComic()) aborts the *caller's* signal specifically; that is not a sign AniList is
+		// down, just that this particular request is no longer wanted, so it is rethrown as before
+		// with no cooldown and no retry. Anything else that lands here with an AbortError came from
+		// this function's own timeout instead (the caller's signal, if any, is still unaborted) -
+		// treated the same as a 403 below, not rethrown.
+		if(err && err.name === 'AbortError' && signal && signal.aborted)
 			throw err;
 
-		if (retries > 0) {
-			await _sleep(1000);
-			return _graphQLFetch(body, headers, retries - 1, signal);
-		}
+		// Same shared cooldown a 403 sets above, and the same reasoning: a connection that is
+		// timing out or failing outright is not a one-off blip worth burning through retries for -
+		// each retry here is bounded by the same _requestTimeoutMs, but stacking even 2-3 of them
+		// on every folder in a large, newly-cleared library is exactly what read as the queue not
+		// doing anything. The cooldown itself is what protects every *other* folder from repeating
+		// this; this one attempt fails immediately instead of retrying something already known to
+		// be down.
+		_rateLimitedUntil = Math.max(_rateLimitedUntil, Date.now() + 60000);
 		throw err;
 	}
 }
@@ -134,6 +154,18 @@ async function _graphQLFetch(body, headers = {}, retries = 3, signal = null)
 function setSiteData(siteData)
 {
 	site = siteData;
+}
+
+// Whether a call right now would just sit out the shared cooldown a prior 403/429 already set
+// (_queuedRequest above waits out _rateLimitedUntil before every request, AniList-down or not).
+// scrapeFolderMetadata() (tracking.js) checks this before spending a folder's turn in the scrape
+// queue on AniList at all - with AniList unreachable, that cooldown was being paid by every single
+// folder in a large newly-scraped library, one at a time, before ever reaching the MyAnimeList
+// fallback; skipping straight to MAL while it is known to be down gets every folder there in the
+// time one used to cost.
+function isRateLimited()
+{
+	return Date.now() < _rateLimitedUntil;
 }
 
 // Search comic/manga in site
@@ -484,6 +516,70 @@ async function getComicMetadata(siteId)
 	return {};
 }
 
+// Prequel/sequel/spin-off/adaptation data for the Relationship Explorer (dom/relationship-
+// explorer.js) - a separate, on-demand query rather than folded into getComicMetadata() above,
+// which every routine metadata scrape calls; relations are only ever needed once a user actually
+// opens the explorer for one specific series, not on every match.
+async function getComicRelations(siteId)
+{
+	const query = `
+	query ($id: Int) {
+		Media (id: $id, type: MANGA) {
+			relations {
+				edges {
+					relationType(version: 2)
+					node {
+						id
+						type
+						title {
+							romaji
+							english
+							userPreferred
+						}
+						synonyms
+						coverImage {
+							medium
+						}
+						siteUrl
+					}
+				}
+			}
+		}
+	}
+	`;
+
+	const body = { query: query, variables: { id: siteId } };
+
+	try
+	{
+		const response = await _graphQLFetch(body, {}, 3);
+		if(!response || response.status !== 200)
+			return [];
+
+		const json = await response.json();
+		const edges = json?.data?.Media?.relations?.edges || [];
+
+		return edges.map(function(edge) {
+			const node = edge?.node || {};
+
+			return {
+				id: node.id,
+				mediaType: node.type || 'MANGA', // ANIME vs MANGA/MANHWA/etc - AniList calls both MANGA
+				relationType: String(edge?.relationType || 'OTHER'),
+				title: node?.title?.userPreferred || node?.title?.romaji || node?.title?.english || '',
+				titleRomaji: node?.title?.romaji || '',
+				titleEnglish: node?.title?.english || '',
+				synonyms: Array.isArray(node.synonyms) ? node.synonyms : [],
+				image: node?.coverImage?.medium || '',
+				siteUrl: node.siteUrl || '',
+			};
+		}).filter(function(relation) { return relation.id && relation.title; });
+	}
+	catch(error) {}
+
+	return [];
+}
+
 // Return data of comic/manga
 async function getComicData(siteId)
 {
@@ -730,8 +826,10 @@ module.exports = {
 	searchComic: searchComic,
 	getTrending: getTrending,
 	getComicMetadata: getComicMetadata,
+	getComicRelations: getComicRelations,
 	getComicData: getComicData,
 	login: login,
 	refreshToken: refreshToken,
 	track: track,
+	isRateLimited: isRateLimited,
 };

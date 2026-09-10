@@ -11,14 +11,30 @@ async function searchComic(title)
 	if(controller) controller.abort();
 	controller = new AbortController();
 
+	const query = title.slice(0, 64); // MAL 400s on a query much longer than this
+
+	// MAL also 400s on a query this short outright (and a 1-2 character query could never
+	// usefully match a title anyway) - most often seen from a candidate a title-cleaning bug
+	// upstream (extractCandidatesFromFolderPath(), folder-title.js) mangled down to almost
+	// nothing, e.g. "Dr. Stone" -> "Dr". That specific bug is fixed at the source, but failing
+	// fast here too means a similarly-malformed candidate from anywhere else costs nothing
+	// instead of a guaranteed-failing round trip.
+	if(query.trim().length < 3)
+		return [];
+
 	const variables = new URLSearchParams({
 		// MAL's manga search takes `q`/`limit`/`offset`/`fields` - not the `page`/`perPage`
 		// AniList's own API uses, which this had been sending instead. MAL's API rejects the
 		// request outright (400) rather than just ignoring the unrecognised parameters.
-		q: title.slice(0, 64), // MAL 400s on a query much longer than this
+		q: query,
 		limit: 10,
 		fields: 'title,alternative_titles,main_picture,authors{first_name,last_name}',
 	});
+
+	// Bounded so an unreachable/hanging MAL request fails in a few seconds instead of however
+	// long the OS's own TCP timeout takes - the same reasoning, and the same fix, as AniList's
+	// own _graphQLFetch() (tracking/anilist/anilist.js).
+	const timeoutSignal = AbortSignal.timeout(8000);
 
 	const options = {
 		method: 'GET',
@@ -26,7 +42,7 @@ async function searchComic(title)
 			'X-MAL-CLIENT-ID': site.auth.clientId,
 			'Accept': 'application/json',
 		},
-		signal: controller.signal,
+		signal: AbortSignal.any([controller.signal, timeoutSignal]),
 	};
 
 	try
@@ -91,6 +107,7 @@ async function getComicMetadata(siteId)
 			'X-MAL-CLIENT-ID': site.auth.clientId,
 			'Accept': 'application/json',
 		},
+		signal: AbortSignal.timeout(8000),
 	};
 
 	const seriesTypes = { manga: 'manga', manhwa: 'manhwa', manhua: 'manhua' };
@@ -139,6 +156,59 @@ async function getComicMetadata(siteId)
 	catch(error) {}
 
 	return {};
+}
+
+// Prequel/sequel/spin-off/adaptation data for the Relationship Explorer - the MAL-side equivalent
+// of anilist.js's getComicRelations(), for a folder matched via MAL instead of AniList. MAL's own
+// relation_type strings ("prequel", "sequel", "side_story", "spin_off", "adaptation", ...) are
+// passed through uppercased rather than remapped to AniList's enum - normalizeRelationType()
+// (tracking.js) is what both sides funnel through before display, so this only needs to be
+// consistent with itself, not with AniList's naming.
+async function getComicRelations(siteId)
+{
+	const options = {
+		method: 'GET',
+		headers: {
+			'X-MAL-CLIENT-ID': site.auth.clientId,
+			'Accept': 'application/json',
+		},
+		signal: AbortSignal.timeout(8000),
+	};
+
+	try
+	{
+		const response = await fetch('https://api.myanimelist.net/v2/manga/'+siteId+'?fields=related_manga,related_anime', options);
+
+		if(response.status !== 200)
+			return [];
+
+		const json = await response.json();
+		const relatedManga = Array.isArray(json.related_manga) ? json.related_manga : [];
+		const relatedAnime = Array.isArray(json.related_anime) ? json.related_anime : [];
+
+		const mapEntry = function(entry, mediaType) {
+			const node = entry?.node || {};
+
+			return {
+				id: node.id,
+				mediaType: mediaType,
+				relationType: String(entry?.relation_type || 'other').toUpperCase(),
+				title: node.title || '',
+				titleRomaji: node.title || '',
+				titleEnglish: '',
+				synonyms: [],
+				image: node?.main_picture?.medium || '',
+				siteUrl: node.id ? ('https://myanimelist.net/'+(mediaType === 'ANIME' ? 'anime' : 'manga')+'/'+node.id) : '',
+			};
+		};
+
+		return relatedManga.map(function(entry) { return mapEntry(entry, 'MANGA'); })
+			.concat(relatedAnime.map(function(entry) { return mapEntry(entry, 'ANIME'); }))
+			.filter(function(relation) { return relation.id && relation.title; });
+	}
+	catch(error) {}
+
+	return [];
 }
 
 // Return data of comic/manga
@@ -343,6 +413,7 @@ module.exports = {
 	setSiteData: setSiteData,
 	searchComic: searchComic,
 	getComicMetadata: getComicMetadata,
+	getComicRelations: getComicRelations,
 	getComicData: getComicData,
 	login: login,
 	refreshToken: refreshToken,

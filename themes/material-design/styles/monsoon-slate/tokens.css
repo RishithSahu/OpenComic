@@ -1,0 +1,22 @@
+/* Monsoon Slate - moody rain: calm rounded-but-restrained shapes, a slow even motion, a quiet
+modern face, cool slate blooms standing in for overcast light. */
+.app.style-monsoon-slate {
+	--font-display: "Barlow", "Segoe UI", sans-serif;
+	--shape-radius-control: 26px;
+	--shape-radius-button: 12px;
+	--shape-radius-button-compact: 10px;
+	--shape-radius-chip: 6px;
+	--shape-radius-thumb: 20px;
+	--shape-radius-thumb-native: 100px;
+	--shape-radius-nav-pill: 12px;
+	--shape-radius-nav-pill-fill: 12px;
+	--shape-radius-panel: 10px;
+	--shape-border-width: 1px;
+	--md-sys-motion-easing-standard: cubic-bezier(0.4, 0.1, 0.3, 1);
+	--md-sys-motion-easing-standard-decelerate: cubic-bezier(0.2, 0.4, 0.15, 1);
+	--md-sys-motion-easing-legacy: cubic-bezier(0.4, 0.1, 0.3, 1);
+	--surface-texture-image:
+		linear-gradient(105deg, rgba(150, 170, 190, 0.05) 0px, rgba(150, 170, 190, 0.05) 1px, transparent 1px, transparent 22px);
+	--surface-texture-size: auto;
+	--surface-texture-repeat: repeat;
+}

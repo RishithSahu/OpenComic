@@ -13,10 +13,24 @@ const METADATA_SCRAPE_RETRY_COOLDOWN = 1000 * 60 * 60 * 6; // 6 hours
 // independent of anything about the request itself. This is the durable, cross-session backoff
 // for that case (see metadata.lastAttemptAt, folder-metadata.js).
 const METADATA_SCRAPE_NO_MATCH_COOLDOWN = 1000 * 60 * 60 * 24 * 21; // 21 days
-const METADATA_SCRAPE_QUEUE_DELAY = 2200;
+// Stamped onto metadata.scrapeAttemptVersion (folder-metadata.js) alongside lastAttemptAt on
+// every "no match" conclusion - see needsMetadataScrape()'s use of it below. Bump this whenever a
+// fix changes whether a folder that previously failed to match now would - a title-mangling bug
+// in candidate extraction and a request that hung instead of failing both landed in this same
+// bucket before being fixed, and every folder that failed for one of those reasons was otherwise
+// durably stuck for up to 21 days on a "no match" the fixed code was never actually responsible
+// for.
+const METADATA_SCRAPE_LOGIC_VERSION = 1;
+// These were paced for a folder that pays two external APIs' worth of caution (AniList first,
+// MyAnimeList as fallback). With AniList's own attempt now skipped outright while it is rate-
+// limited/unreachable (see the isRateLimited() check in scrapeFolderMetadata() below), most
+// folders in a queue only make the one MAL request MAL's own unofficial rate-limit guidance
+// comfortably allows faster than this - tightened accordingly. Still throttled, just no longer
+// tuned for a request pattern most folders are not making anymore.
+const METADATA_SCRAPE_QUEUE_DELAY = 900;
 const METADATA_SCRAPE_QUEUE_BATCH_SIZE = 24;
-const METADATA_SCRAPE_QUEUE_DELAY_FAST = 500;
-const METADATA_SCRAPE_QUEUE_FAST_COUNT = 8;
+const METADATA_SCRAPE_QUEUE_DELAY_FAST = 250;
+const METADATA_SCRAPE_QUEUE_FAST_COUNT = 15;
 const METADATA_UI_REFRESH_THROTTLE = 1600;
 const METADATA_UI_REFRESH_ACTIVE_THROTTLE = 4000;
 const TRACKING_METADATA_DEBUG = false;
@@ -471,11 +485,14 @@ function needsMetadataScrape(path = false)
 
 	if(metadata.source !== 'anilist' || !metadata.anilistId)
 	{
-		// No confirmed match yet - but if one was already attempted recently (durably, across
-		// restarts, unlike the in-memory metadataScrapeCooldown below), leave it be rather than
-		// re-querying a title AniList has already failed to match every single time this or any
-		// past session has opened this folder.
-		if(metadata.lastAttemptAt && (Date.now() - metadata.lastAttemptAt) < METADATA_SCRAPE_NO_MATCH_COOLDOWN)
+		// No confirmed match yet - but if one was already attempted recently under the *current*
+		// matching logic (durably, across restarts, unlike the in-memory metadataScrapeCooldown
+		// below), leave it be rather than re-querying a title that has already failed to match
+		// every single time this or any past session has opened this folder. A record from an
+		// older scrapeAttemptVersion (or missing the field entirely, defaulting to 0) does not
+		// honour this cooldown at all - it predates whatever fix changed since, and re-trying it
+		// once is exactly what that fix was for.
+		if(metadata.lastAttemptAt && metadata.scrapeAttemptVersion === METADATA_SCRAPE_LOGIC_VERSION && (Date.now() - metadata.lastAttemptAt) < METADATA_SCRAPE_NO_MATCH_COOLDOWN)
 			return false;
 
 		return true;
@@ -1122,7 +1139,7 @@ function setTrackingId(site, siteId)
 					anilistId: siteId,
 					title: metadata?.title || '',
 					author: metadata?.author || '',
-					seriesType: metadata?.seriesType || '',
+					seriesType: lockedSeriesType(getFolderMetadata(dom.history.mainPath), metadata?.seriesType),
 					demographic: metadata?.demographic || '',
 					genres: metadata?.genres || [],
 					description: metadata?.description || '',
@@ -1267,6 +1284,46 @@ function getFolderMetadata(path = false)
 function validateFolderMetadata(metadata = {})
 {
 	return folderMetadataSchema.validateFolderMetadata(metadata);
+}
+
+// Used by every scrape/refetch write site that sets seriesType from a matched site's own
+// metadata - preserves a user's manual "Set format" choice (seriesTypeManual, folder-metadata.js)
+// instead of letting the next scrape silently overwrite it with whatever AniList/MAL says.
+function lockedSeriesType(current, scrapedSeriesType)
+{
+	if(current && current.seriesTypeManual)
+		return current.seriesType || '';
+
+	return scrapedSeriesType || '';
+}
+
+const ALLOWED_MANUAL_SERIES_TYPES = new Set(['manga', 'manhwa', 'manhua']);
+
+// The folder-context-menu "Set format" action - an explicit correction for when metadata fetch
+// gets a title's format wrong (or never fetches it at all), independent of anything else about
+// the folder's match. Also drives the automatic reading-mode default (paged vs. webtoon-scroll,
+// see reading.setTrackedSeriesReadingMode()) so picking a format here changes both at once,
+// forcibly - unlike the automatic scrape-driven default, this overrides even a reading mode the
+// user had separately customised for this folder, since choosing a format here is exactly as
+// deliberate an action as changing that would have been.
+function setFolderSeriesType(path = false, seriesType = '')
+{
+	const folderPath = getFolderMetadataPath(path);
+	if(!folderPath)
+		return false;
+
+	seriesType = String(seriesType || '').toLowerCase();
+	const isManual = ALLOWED_MANUAL_SERIES_TYPES.has(seriesType);
+
+	const saved = setFolderMetadata(folderPath, {
+		seriesType: isManual ? seriesType : '',
+		seriesTypeManual: isManual,
+	});
+
+	if(typeof reading !== 'undefined' && reading && typeof reading.setTrackedSeriesReadingMode === 'function')
+		reading.setTrackedSeriesReadingMode(folderPath, isManual ? seriesType : '');
+
+	return saved;
 }
 
 function setFolderMetadata(path = false, metadata = {})
@@ -1421,7 +1478,7 @@ async function scrapeFolderMetadata(path = false, force = false)
 			metadataScrapeCooldown.set(cacheKey, now + METADATA_SCRAPE_RETRY_COOLDOWN);
 			// Durable, cross-session record that this was tried and did not match - see
 			// METADATA_SCRAPE_NO_MATCH_COOLDOWN / needsMetadataScrape() above.
-			setFolderMetadata(folderPath, { lastAttemptAt: now });
+			setFolderMetadata(folderPath, { lastAttemptAt: now, scrapeAttemptVersion: METADATA_SCRAPE_LOGIC_VERSION });
 			metadataScrapeStats.unmatched++;
 			logMetadataScrape('unmatched:no-candidates', {
 				path: folderPath,
@@ -1434,35 +1491,51 @@ async function scrapeFolderMetadata(path = false, force = false)
 		const resultById = new Map();
 		const searchCandidates = force ? candidates.slice(0, 2) : candidates.slice(0, 1);
 
-		for(let i = 0, len = searchCandidates.length; i < len; i++)
+		// A prior 403/429 already parked every subsequent AniList call behind a shared cooldown
+		// (_rateLimitedUntil, anilist.js) that a single request just sits out before even firing -
+		// up to a minute, paid by every folder in the scrape queue, one at a time, while AniList is
+		// known to be unreachable. Skip the attempt entirely while that cooldown is active instead
+		// of queueing behind it, and go straight to the MyAnimeList fallback below - the searches
+		// AniList would have made anyway once it recovers are not lost, just deferred to this
+		// folder's next scrape (its TTL/cooldown bookkeeping below is unaffected either way).
+		const aniListSkipped = !!sitesScripts.anilist.isRateLimited?.();
+
+		if(!aniListSkipped)
 		{
-			const candidate = searchCandidates[i];
-			let results = [];
-
-			try
+			for(let i = 0, len = searchCandidates.length; i < len; i++)
 			{
-				results = await sitesScripts.anilist.searchComic(candidate);
-			}
-			catch(error)
-			{
-				console.error(error);
-				metadataScrapeStats.failed++;
-				metadataScrapeStats.lastError = String(error?.message || error || 'search failed');
-				logMetadataScrape('search-error', {
-					path: folderPath,
-					candidate: candidate,
-					error: metadataScrapeStats.lastError,
-				});
-			}
+				const candidate = searchCandidates[i];
+				let results = [];
 
-			for(let r = 0, rlen = (results || []).length; r < rlen; r++)
-			{
-				const result = results[r];
-				if(!result?.id) continue;
+				try
+				{
+					results = await sitesScripts.anilist.searchComic(candidate);
+				}
+				catch(error)
+				{
+					console.error(error);
+					metadataScrapeStats.failed++;
+					metadataScrapeStats.lastError = String(error?.message || error || 'search failed');
+					logMetadataScrape('search-error', {
+						path: folderPath,
+						candidate: candidate,
+						error: metadataScrapeStats.lastError,
+					});
+				}
 
-				if(!resultById.has(result.id))
-					resultById.set(result.id, result);
+				for(let r = 0, rlen = (results || []).length; r < rlen; r++)
+				{
+					const result = results[r];
+					if(!result?.id) continue;
+
+					if(!resultById.has(result.id))
+						resultById.set(result.id, result);
+				}
 			}
+		}
+		else
+		{
+			logMetadataScrape('anilist-skipped-rate-limited', { path: folderPath });
 		}
 
 		const rejectedIds = Array.from(getMetadataRejectedIds(cacheKey));
@@ -1533,7 +1606,7 @@ async function scrapeFolderMetadata(path = false, force = false)
 			metadataScrapeCooldown.set(cacheKey, now + METADATA_SCRAPE_RETRY_COOLDOWN);
 			// Durable, cross-session record that this was tried and did not match - see
 			// METADATA_SCRAPE_NO_MATCH_COOLDOWN / needsMetadataScrape() above.
-			setFolderMetadata(folderPath, { lastAttemptAt: now });
+			setFolderMetadata(folderPath, { lastAttemptAt: now, scrapeAttemptVersion: METADATA_SCRAPE_LOGIC_VERSION });
 			metadataScrapeStats.unmatched++;
 			logMetadataScrape('unmatched:no-result', {
 				path: folderPath,
@@ -1555,7 +1628,7 @@ async function scrapeFolderMetadata(path = false, force = false)
 			metadataScrapeCooldown.set(cacheKey, now + METADATA_SCRAPE_RETRY_COOLDOWN);
 			// Durable, cross-session record that this was tried and did not match - see
 			// METADATA_SCRAPE_NO_MATCH_COOLDOWN / needsMetadataScrape() above.
-			setFolderMetadata(folderPath, { lastAttemptAt: now });
+			setFolderMetadata(folderPath, { lastAttemptAt: now, scrapeAttemptVersion: METADATA_SCRAPE_LOGIC_VERSION });
 			metadataScrapeStats.unmatched++;
 			logMetadataScrape('unmatched:low-confidence', {
 				path: folderPath,
@@ -1579,7 +1652,7 @@ async function scrapeFolderMetadata(path = false, force = false)
 			...(matchSource === 'anilist' ? { anilistId: best.id } : { malId: best.id }),
 			title: metadata?.title || best.title || '',
 			author: metadata?.author || '',
-			seriesType: metadata?.seriesType || '',
+			seriesType: lockedSeriesType(current, metadata?.seriesType),
 			demographic: metadata?.demographic || '',
 			genres: metadata?.genres || [],
 			description: metadata?.description || '',
@@ -1693,7 +1766,7 @@ async function refetchFolderMetadataFromAniList(path = false, anilistId = 0, for
 					anilistId: resolvedAnilistId,
 					title: metadata?.title || current?.title || '',
 					author: metadata?.author || '',
-					seriesType: metadata?.seriesType || '',
+					seriesType: lockedSeriesType(current, metadata?.seriesType),
 					demographic: metadata?.demographic || '',
 					genres: metadata?.genres || [],
 					description: metadata?.description || '',
@@ -1735,6 +1808,117 @@ async function refetchFolderMetadataFromAniList(path = false, anilistId = 0, for
 	return scrapeFolderMetadata(folderPath, true);
 }
 
+// Same shape as refetchFolderMetadataFromAniList() above, for a folder the user is pointing at a
+// specific MyAnimeList entry instead (the "Edit metadata" dialog's MAL ID field). Before this
+// existed, the dialog's save handler called refetchFolderMetadataFromAniList() unconditionally
+// regardless of which id field was actually filled in - a malId with no anilistId meant
+// resolvedAnilistId stayed 0, both of that function's AniList branches were skipped, and it fell
+// straight through to a fresh, generic scrapeFolderMetadata() re-search using the folder's own
+// name - the exact fuzzy search that not matching this folder is *why* the user was providing a
+// MAL id by hand in the first place. The id they just typed in was saved to storage a moment
+// earlier by the dialog's own setFolderMetadata() call, but then immediately at risk of being
+// overwritten by whatever that unrelated re-search happened to turn up (or left looking like
+// nothing had happened at all, if it turned up nothing, same as before).
+async function refetchFolderMetadataFromMyAnimeList(path = false, malId = 0, force = false, titleOverride = '')
+{
+	const folderPath = getFolderMetadataPath(path);
+	if(!folderPath)
+		return false;
+
+	const current = getFolderMetadata(folderPath);
+	let resolvedMalId = +(malId || 0);
+	const normalizedTitle = String(titleOverride || '').trim();
+	const cacheKey = metadataScrapeCacheKey(folderPath);
+	const startedAt = Date.now();
+
+	loadSiteScript('myanimelist');
+
+	if(!sitesScripts.myanimelist)
+		return current || false;
+
+	if(resolvedMalId > 0)
+		allowMetadataId(cacheKey, resolvedMalId);
+
+	if(resolvedMalId <= 0 && normalizedTitle && sitesScripts.myanimelist.searchComic)
+	{
+		try
+		{
+			const results = await sitesScripts.myanimelist.searchComic(normalizedTitle);
+			const ranked = folderTitle.rankSearchResults([normalizedTitle], results || [], {
+				referenceYear: +(current?.serializationYear || 0),
+				excludedIds: Array.from(getMetadataRejectedIds(cacheKey)),
+			});
+			const best = ranked[0] || (results && results[0]) || false;
+
+			if(best?.id)
+				resolvedMalId = +best.id;
+		}
+		catch(error)
+		{
+			console.error(error);
+		}
+	}
+
+	if(resolvedMalId > 0 && sitesScripts.myanimelist.getComicMetadata)
+	{
+		try
+		{
+			const metadata = await sitesScripts.myanimelist.getComicMetadata(resolvedMalId);
+
+			if(metadata && metadata.id)
+			{
+				const chapters = +(metadata?.chapters || 0);
+				const estimatedReadingMinutes = chapters > 0 ? Math.round(chapters * 7) : 0;
+				const genreClusters = Array.isArray(metadata?.genres) ? metadata.genres.map(function(genre) {
+					return String(genre || '').toLowerCase().trim();
+				}).filter(Boolean).slice(0, 6) : [];
+
+				const saved = setFolderMetadata(folderPath, {
+					malId: resolvedMalId,
+					title: metadata?.title || current?.title || '',
+					author: metadata?.author || '',
+					seriesType: lockedSeriesType(current, metadata?.seriesType),
+					demographic: metadata?.demographic || '',
+					genres: metadata?.genres || [],
+					description: metadata?.description || '',
+					serializationYear: metadata?.serializationYear || 0,
+					rating: metadata?.rating || 0,
+					recommendation: {
+						readingTimeMinutes: estimatedReadingMinutes,
+						genreClusters: genreClusters,
+					},
+					source: 'myanimelist',
+					confidence: 100,
+				});
+
+				allowMetadataId(cacheKey, resolvedMalId);
+				metadataScrapeCooldown.delete(cacheKey);
+				metadataScrapeStats.success++;
+				metadataScrapeStats.lastDurationMs = Date.now() - startedAt;
+				logMetadataScrape('refetch-success', {
+					path: folderPath,
+					malId: resolvedMalId,
+				});
+
+				return saved;
+			}
+		}
+		catch(error)
+		{
+			console.error(error);
+			metadataScrapeStats.failed++;
+			metadataScrapeStats.lastError = String(error?.message || error || 'refetch failed');
+			logMetadataScrape('refetch-error', {
+				path: folderPath,
+				malId: resolvedMalId,
+				error: metadataScrapeStats.lastError,
+			});
+		}
+	}
+
+	return scrapeFolderMetadata(folderPath, true);
+}
+
 async function reportWrongFolderMetadataMatch(path = false, retry = true)
 {
 	const folderPath = getFolderMetadataPath(path);
@@ -1760,7 +1944,10 @@ async function reportWrongFolderMetadataMatch(path = false, retry = true)
 		malId: 0,
 		title: fallbackTitle,
 		author: '',
-		seriesType: '',
+		// A "wrong match" report is about which site entry matched, not the user's own format
+		// classification (see setFolderSeriesType()) - that survives this reset the same way it
+		// survives an ordinary rescan.
+		seriesType: lockedSeriesType(current, ''),
 		demographic: '',
 		genres: [],
 		description: '',
@@ -1786,6 +1973,137 @@ async function reportWrongFolderMetadataMatch(path = false, retry = true)
 		return scrapeFolderMetadata(folderPath, true);
 
 	return true;
+}
+
+// AniList's relationType and MAL's relation_type use different vocabularies (see the comment on
+// myanimelist.js's getComicRelations()) - both funnel through here so
+// dom/relationship-explorer.js only ever has to lay out five fixed buckets, not every possible
+// spelling either site uses for the same idea.
+function normalizeRelationType(raw = '')
+{
+	const value = String(raw || '').toUpperCase();
+
+	if(value === 'PREQUEL') return 'prequel';
+	if(value === 'SEQUEL') return 'sequel';
+	if(value === 'ADAPTATION') return 'adaptation';
+	if(value === 'SPIN_OFF') return 'spinoff';
+	if(value === 'SIDE_STORY') return 'sidestory';
+
+	return 'other';
+}
+
+// A relation only ever comes back with an id in whichever site actually returned it - not
+// necessarily useful, since a folder here might be tracked via the *other* site (this series
+// matched on AniList, but a prequel of it happens to only be tracked locally via MAL, or was
+// never auto-matched at all). Falls through from an exact id match to a fuzzy title match against
+// every locally tracked title (reusing folderTitle.scoreTitleMatch - the same scoring
+// scrapeFolderMetadata() itself uses) before giving up and treating it as not locally owned.
+function resolveRelationLocalPath(relation)
+{
+	if(relation.mediaType === 'ANIME')
+		return false; // never expected to exist as a local folder in a manga/comic reader
+
+	const trackingFolderMetadata = relative.get('trackingFolderMetadata') || {};
+
+	for(const path in trackingFolderMetadata)
+	{
+		const metadata = trackingFolderMetadata[path];
+		if(!metadata) continue;
+
+		if(relation.bySite === 'anilist' && metadata.anilistId && +metadata.anilistId === +relation.id)
+			return path;
+
+		if(relation.bySite === 'myanimelist' && metadata.malId && +metadata.malId === +relation.id)
+			return path;
+	}
+
+	const candidateTitles = [relation.title, relation.titleRomaji, relation.titleEnglish]
+		.concat(Array.isArray(relation.synonyms) ? relation.synonyms : [])
+		.filter(Boolean);
+
+	if(!candidateTitles.length)
+		return false;
+
+	let bestPath = false, bestScore = 0;
+
+	for(const path in trackingFolderMetadata)
+	{
+		const metadata = trackingFolderMetadata[path];
+		if(!metadata || !metadata.title) continue;
+
+		for(let i = 0, len = candidateTitles.length; i < len; i++)
+		{
+			const score = folderTitle.scoreTitleMatch(candidateTitles[i], metadata.title);
+
+			if(score > bestScore)
+			{
+				bestScore = score;
+				bestPath = path;
+			}
+		}
+	}
+
+	return (bestScore >= METADATA_SCRAPE_MIN_CONFIDENCE) ? bestPath : false;
+}
+
+// dom/relationship-explorer.js's data source - prequel/sequel/spin-off/side-story/adaptation for
+// one series, each resolved to a local folder where one exists (see resolveRelationLocalPath()
+// above) or left as an external AniList/MAL link where it doesn't (a relation not owned locally,
+// or an anime adaptation, which never is one).
+async function getSeriesRelations(path = false)
+{
+	const folderPath = getFolderMetadataPath(path);
+	if(!folderPath)
+		return { center: false, relations: [] };
+
+	const metadata = getFolderMetadata(folderPath);
+	const center = { path: folderPath, title: (metadata && metadata.title) || p.basename(folderPath) };
+
+	if(!metadata)
+		return { center: center, relations: [], unsupported: true };
+
+	let rawRelations = [];
+	let bySite = '';
+
+	if(metadata.source === 'anilist' && metadata.anilistId)
+	{
+		loadSiteScript('anilist');
+		bySite = 'anilist';
+
+		try { rawRelations = await sitesScripts.anilist.getComicRelations(metadata.anilistId); }
+		catch(error) { console.error(error); }
+	}
+	else if(metadata.source === 'myanimelist' && metadata.malId)
+	{
+		loadSiteScript('myanimelist');
+		bySite = 'myanimelist';
+
+		try { rawRelations = await sitesScripts.myanimelist.getComicRelations(metadata.malId); }
+		catch(error) { console.error(error); }
+	}
+	else
+	{
+		// Manual/import/unmatched folders carry no site id to ask a relations question about at
+		// all - distinct from a real query that simply came back empty.
+		return { center: center, relations: [], unsupported: true };
+	}
+
+	const relations = rawRelations.map(function(relation) {
+		const withSite = Object.assign({}, relation, { bySite: bySite });
+		const localPath = resolveRelationLocalPath(withSite);
+
+		return {
+			id: relation.id,
+			title: relation.title,
+			mediaType: relation.mediaType,
+			bucket: normalizeRelationType(relation.relationType),
+			image: relation.image,
+			siteUrl: relation.siteUrl,
+			localPath: localPath,
+		};
+	});
+
+	return { center: center, relations: relations };
 }
 
 // Scraping functions
@@ -2196,6 +2514,9 @@ module.exports = {
 	extractFolderTitleCandidates,
 	scrapeFolderMetadata,
 	refetchFolderMetadataFromAniList,
+	refetchFolderMetadataFromMyAnimeList,
+	setFolderSeriesType,
+	getSeriesRelations,
 	reportWrongFolderMetadataMatch,
 	needsMetadataScrape,
 	getMetadataScrapeStats,

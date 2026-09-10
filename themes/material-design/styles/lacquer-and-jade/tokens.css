@@ -1,0 +1,23 @@
+/* Lacquer & Jade - East Asian lacquerware: glossy restrained radii, a slow elegant motion, a
+refined serif, jade-green inlay glow against a dark lacquer ground. */
+.app.style-lacquer-and-jade {
+	--font-display: "Marcellus", Georgia, serif;
+	--shape-radius-control: 20px;
+	--shape-radius-button: 6px;
+	--shape-radius-button-compact: 6px;
+	--shape-radius-chip: 4px;
+	--shape-radius-thumb: 20px;
+	--shape-radius-thumb-native: 100px;
+	--shape-radius-nav-pill: 6px;
+	--shape-radius-nav-pill-fill: 6px;
+	--shape-radius-panel: 6px;
+	--shape-border-width: 1px;
+	--md-sys-motion-easing-standard: cubic-bezier(0.6, 0, 0.2, 1);
+	--md-sys-motion-easing-standard-decelerate: cubic-bezier(0.15, 0.5, 0.1, 1);
+	--md-sys-motion-easing-legacy: cubic-bezier(0.6, 0, 0.2, 1);
+	--surface-texture-image:
+		radial-gradient(circle at 85% 90%, rgba(70, 200, 150, 0.14), transparent 40%),
+		radial-gradient(circle at 8% 10%, rgba(70, 200, 150, 0.08), transparent 42%);
+	--surface-texture-size: auto;
+	--surface-texture-repeat: no-repeat;
+}

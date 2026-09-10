@@ -1,0 +1,24 @@
+/* Sumi-e Ink - East Asian ink-wash: soft brush-bleed blooms instead of hard-edged gradients,
+slow settling motion (ink spreading into paper, not snapping), a serif built for it. */
+.app.style-sumi-e-ink {
+	--font-display: "Shippori Mincho", Georgia, serif;
+	--shape-radius-control: 28px;
+	--shape-radius-button: 28px;
+	--shape-radius-button-compact: 24px;
+	--shape-radius-chip: 4px;
+	--shape-radius-thumb: 18px;
+	--shape-radius-thumb-native: 90px;
+	--shape-radius-nav-pill: 20px;
+	--shape-radius-nav-pill-fill: 20px;
+	--shape-radius-panel: 6px;
+	--shape-border-width: 1px;
+	--md-sys-motion-easing-standard: cubic-bezier(0.25, 0.1, 0.15, 1);
+	--md-sys-motion-easing-standard-decelerate: cubic-bezier(0.1, 0.6, 0.15, 1);
+	--md-sys-motion-easing-legacy: cubic-bezier(0.2, 0.05, 0.15, 1);
+	--surface-texture-image:
+		radial-gradient(ellipse 42% 30% at 14% 20%, rgba(20, 20, 22, 0.16), transparent 70%),
+		radial-gradient(ellipse 55% 38% at 88% 85%, rgba(20, 20, 22, 0.12), transparent 70%),
+		radial-gradient(ellipse 26% 42% at 70% 15%, rgba(20, 20, 22, 0.08), transparent 75%);
+	--surface-texture-size: auto;
+	--surface-texture-repeat: no-repeat;
+}

@@ -1,0 +1,22 @@
+/* Letterpress Broadsheet - newspaper: square corners, a hairline everywhere, a classic serif
+headline face, a halftone-photo speckle instead of a gradient. */
+.app.style-letterpress-broadsheet {
+	--font-display: "Libre Baskerville", Georgia, serif;
+	--shape-radius-control: 4px;
+	--shape-radius-button: 2px;
+	--shape-radius-button-compact: 2px;
+	--shape-radius-chip: 0px;
+	--shape-radius-thumb: 3px;
+	--shape-radius-thumb-native: 15px;
+	--shape-radius-nav-pill: 2px;
+	--shape-radius-nav-pill-fill: 2px;
+	--shape-radius-panel: 0px;
+	--shape-border-width: 1px;
+	--md-sys-motion-easing-standard: cubic-bezier(0.4, 0, 0.2, 1);
+	--md-sys-motion-easing-standard-decelerate: cubic-bezier(0.2, 0.3, 0.1, 1);
+	--md-sys-motion-easing-legacy: cubic-bezier(0.4, 0, 0.2, 1);
+	--surface-texture-image:
+		radial-gradient(rgba(30, 28, 24, 0.07) 1px, transparent 1.1px);
+	--surface-texture-size: 3px 3px;
+	--surface-texture-repeat: repeat;
+}

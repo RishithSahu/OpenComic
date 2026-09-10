@@ -1,0 +1,22 @@
+/* Arctic Aurora Pulse - colder and starker than Aurora Observatory: crisp small radii, a snap
+motion, a geometric face, aurora bands kept to the very top edge only. */
+.app.style-arctic-aurora-pulse {
+	--font-display: "Jost", "Segoe UI", sans-serif;
+	--shape-radius-control: 24px;
+	--shape-radius-button: 10px;
+	--shape-radius-button-compact: 8px;
+	--shape-radius-chip: 6px;
+	--shape-radius-thumb: 20px;
+	--shape-radius-thumb-native: 100px;
+	--shape-radius-nav-pill: 10px;
+	--shape-radius-nav-pill-fill: 10px;
+	--shape-radius-panel: 10px;
+	--shape-border-width: 1px;
+	--md-sys-motion-easing-standard: cubic-bezier(0.15, 0.85, 0.2, 1);
+	--md-sys-motion-easing-standard-decelerate: cubic-bezier(0.1, 0.8, 0.15, 1);
+	--md-sys-motion-easing-legacy: cubic-bezier(0.15, 0.85, 0.2, 1);
+	--surface-texture-image:
+		linear-gradient(180deg, rgba(120, 220, 180, 0.14) 0%, rgba(150, 120, 230, 0.08) 8%, transparent 22%);
+	--surface-texture-size: auto;
+	--surface-texture-repeat: no-repeat;
+}

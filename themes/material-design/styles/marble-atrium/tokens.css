@@ -1,0 +1,22 @@
+/* Marble Atrium - gallery luxury: slow stately motion, an elegant serif, restrained radii, and
+a pale vein-like texture instead of a gradient bloom. */
+.app.style-marble-atrium {
+	--font-display: "Cormorant Garamond", Georgia, serif;
+	--shape-radius-control: 22px;
+	--shape-radius-button: 4px;
+	--shape-radius-button-compact: 4px;
+	--shape-radius-chip: 2px;
+	--shape-radius-thumb: 20px;
+	--shape-radius-thumb-native: 100px;
+	--shape-radius-nav-pill: 4px;
+	--shape-radius-nav-pill-fill: 4px;
+	--shape-radius-panel: 4px;
+	--shape-border-width: 1px;
+	--md-sys-motion-easing-standard: cubic-bezier(0.7, 0, 0.3, 1);
+	--md-sys-motion-easing-standard-decelerate: cubic-bezier(0.2, 0.4, 0.1, 1);
+	--md-sys-motion-easing-legacy: cubic-bezier(0.7, 0, 0.3, 1);
+	--surface-texture-image:
+		linear-gradient(115deg, transparent 0%, rgba(220, 215, 205, 0.06) 42%, transparent 48%, rgba(220, 215, 205, 0.04) 60%, transparent 100%);
+	--surface-texture-size: auto;
+	--surface-texture-repeat: no-repeat;
+}

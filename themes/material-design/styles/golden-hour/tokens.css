@@ -1,0 +1,22 @@
+/* Golden Hour - warm cinematic sunset: soft generous curves, a slow dissolve motion, a
+cinematic display serif, and an amber-to-rose wash. */
+.app.style-golden-hour {
+	--font-display: "Yeseva One", Georgia, serif;
+	--shape-radius-control: 28px;
+	--shape-radius-button: 18px;
+	--shape-radius-button-compact: 16px;
+	--shape-radius-chip: 10px;
+	--shape-radius-thumb: 20px;
+	--shape-radius-thumb-native: 100px;
+	--shape-radius-nav-pill: 18px;
+	--shape-radius-nav-pill-fill: 18px;
+	--shape-radius-panel: 18px;
+	--shape-border-width: 1px;
+	--md-sys-motion-easing-standard: cubic-bezier(0.3, 0, 0.2, 1);
+	--md-sys-motion-easing-standard-decelerate: cubic-bezier(0.1, 0.4, 0.1, 1);
+	--md-sys-motion-easing-legacy: cubic-bezier(0.3, 0, 0.2, 1);
+	--surface-texture-image:
+		linear-gradient(0deg, rgba(255, 140, 60, 0.14) 0%, rgba(255, 100, 130, 0.08) 30%, transparent 60%);
+	--surface-texture-size: auto;
+	--surface-texture-repeat: no-repeat;
+}

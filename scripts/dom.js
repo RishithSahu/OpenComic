@@ -350,7 +350,8 @@ function getTrackingFolderMetadata(path, trackingFolderMetadata = false, isFolde
 	const genres = Array.isArray(metadata.genres) ? metadata.genres.filter(Boolean) : [];
 	const demographic = metadata.demographic ? app.capitalize(String(metadata.demographic)) : '';
 	const year = metadata.serializationYear ? String(metadata.serializationYear) : '';
-	const rating = (+metadata.rating > 0) ? ('★ '+Math.round(+metadata.rating)+'/100') : '';
+	const ratingValue = (+metadata.rating > 0) ? Math.round(+metadata.rating) : 0;
+	const rating = ratingValue ? ('★ '+ratingValue+'/100') : '';
 
 	const metadataSubname = metadata.author || '';
 	let metadataTopSubname = '';
@@ -378,6 +379,7 @@ function getTrackingFolderMetadata(path, trackingFolderMetadata = false, isFolde
 		metadataDemographic: demographic,
 		metadataYear: year,
 		metadataRating: rating,
+		metadataRatingValue: ratingValue,
 		metadataGenres: genres,
 		metadataGenresText: genres.join(' · '),
 		metadataDescription: metadata.description || '',
@@ -385,6 +387,7 @@ function getTrackingFolderMetadata(path, trackingFolderMetadata = false, isFolde
 		metadataTopSubname: metadataTopSubname,
 		metadataSource: metadata.source || '',
 		metadataConfidence: metadata.confidence || 0,
+		metadataSeriesType: metadata.seriesType || '',
 	};
 }
 
@@ -412,9 +415,16 @@ function getFolderMetadataTop(path, mainPath, trackingFolderMetadata = false) {
 		author: metadata.metadataAuthor || '',
 		demographic: metadata.metadataDemographic || '',
 		year: metadata.metadataYear || '',
+		rating: metadata.metadataRating || '',
+		ratingValue: metadata.metadataRatingValue || 0,
 		genres: metadata.metadataGenres || [],
 		genresText: metadata.metadataGenresText || '',
 		description: description,
+		seriesType: metadata.metadataSeriesType || '',
+		isManga: metadata.metadataSeriesType === 'manga',
+		isManhua: metadata.metadataSeriesType === 'manhua',
+		isManhwa: metadata.metadataSeriesType === 'manhwa',
+		isGeneric: !metadata.metadataSeriesType,
 	};
 }
 
@@ -2370,6 +2380,86 @@ function loadThemePage(animation = true) {
 	tabs.update();
 }
 
+/* Page - Library Weather */
+
+function loadWeatherPage(animation = true) {
+	indexPathControl(false, false, false, false, false, 'weather');
+	selectMenuItem('weather');
+
+	setCurrentPathScrollTop();
+
+	onReading = _onReading = false;
+	app.clearMemory();
+
+	reading.hideContent();
+
+	generateAppMenu();
+
+	template.loadHeader('weather.header.html', animation);
+	template.loadGlobalElement('general.elements.menus.html', 'menus');
+	floatingActionButton(false);
+
+	weather.start();
+
+	if (readingActive)
+		readingActive = false;
+
+	tabs.update();
+}
+
+/* Page - Library Constellation */
+
+function loadConstellationPage(animation = true) {
+	indexPathControl(false, false, false, false, false, 'constellation');
+	selectMenuItem('constellation');
+
+	setCurrentPathScrollTop();
+
+	onReading = _onReading = false;
+	app.clearMemory();
+
+	reading.hideContent();
+
+	generateAppMenu();
+
+	template.loadHeader('constellation.header.html', animation);
+	template.loadGlobalElement('general.elements.menus.html', 'menus');
+	floatingActionButton(false);
+
+	constellation.start();
+
+	if (readingActive)
+		readingActive = false;
+
+	tabs.update();
+}
+
+/* Page - Series Relationship Explorer */
+
+function loadRelationshipExplorerPage(path, animation = true) {
+	indexPathControl(false, false, false, false, false, 'relationships');
+
+	setCurrentPathScrollTop();
+
+	onReading = _onReading = false;
+	app.clearMemory();
+
+	reading.hideContent();
+
+	generateAppMenu();
+
+	template.loadHeader('relationship-explorer.header.html', animation);
+	template.loadGlobalElement('general.elements.menus.html', 'menus');
+	floatingActionButton(false);
+
+	relationshipExplorer.start(path);
+
+	if (readingActive)
+		readingActive = false;
+
+	tabs.update();
+}
+
 var currentSelectMenuItem = false;
 
 function selectMenuItem(page) {
@@ -2868,6 +2958,56 @@ async function comicContextMenu(path, mainPath, fromIndex = true, fromIndexNotMa
 		refreshMetadata = document.querySelector('#index-context-menu .context-menu-refresh-metadata');
 	}
 
+	let setFormat = document.querySelector('#index-context-menu .context-menu-set-format');
+
+	if (!setFormat && contextMenuContent) {
+		const setFormatLabel = 'Set format';
+		const setFormatHTML = '<div class="menu-simple-element menu-simple-element-little context-menu-set-format gamepad-item"><i class="material-icon menu-simple-icon-first">auto_stories</i><span>' + setFormatLabel + '</span></div>';
+
+		if (refreshMetadata)
+			refreshMetadata.insertAdjacentHTML('afterend', setFormatHTML);
+		else if (editMetadata)
+			editMetadata.insertAdjacentHTML('afterend', setFormatHTML);
+		else if (rename)
+			rename.insertAdjacentHTML('afterend', setFormatHTML);
+		else {
+			const separatorRemove = contextMenuContent.querySelector('.separator-remove');
+
+			if (separatorRemove)
+				separatorRemove.insertAdjacentHTML('beforebegin', setFormatHTML);
+			else
+				contextMenuContent.insertAdjacentHTML('beforeend', setFormatHTML);
+		}
+
+		setFormat = document.querySelector('#index-context-menu .context-menu-set-format');
+	}
+
+	let viewRelationships = document.querySelector('#index-context-menu .context-menu-view-relationships');
+
+	if (!viewRelationships && contextMenuContent) {
+		const viewRelationshipsLabel = 'View relationships';
+		const viewRelationshipsHTML = '<div class="menu-simple-element menu-simple-element-little context-menu-view-relationships gamepad-item"><i class="material-icon menu-simple-icon-first">hub</i><span>' + viewRelationshipsLabel + '</span></div>';
+
+		if (setFormat)
+			setFormat.insertAdjacentHTML('afterend', viewRelationshipsHTML);
+		else if (refreshMetadata)
+			refreshMetadata.insertAdjacentHTML('afterend', viewRelationshipsHTML);
+		else if (editMetadata)
+			editMetadata.insertAdjacentHTML('afterend', viewRelationshipsHTML);
+		else if (rename)
+			rename.insertAdjacentHTML('afterend', viewRelationshipsHTML);
+		else {
+			const separatorRemove = contextMenuContent.querySelector('.separator-remove');
+
+			if (separatorRemove)
+				separatorRemove.insertAdjacentHTML('beforebegin', viewRelationshipsHTML);
+			else
+				contextMenuContent.insertAdjacentHTML('beforeend', viewRelationshipsHTML);
+		}
+
+		viewRelationships = document.querySelector('#index-context-menu .context-menu-view-relationships');
+	}
+
 	if (rename) {
 		const canRename = !isServer && !/app\.asar\.unpacked/.test(path);
 		rename.style.display = canRename ? 'block' : 'none';
@@ -2890,6 +3030,22 @@ async function comicContextMenu(path, mainPath, fromIndex = true, fromIndexNotMa
 
 		if (canRefreshMetadata)
 			refreshMetadata.setAttribute('onclick', 'dom.refreshFolderMetadata(\'' + escapeQuotes(escapeBackSlash(path), 'simples') + '\');');
+	}
+
+	if (setFormat) {
+		const canSetFormat = !isServer && folder && !/app\.asar\.unpacked/.test(path);
+		setFormat.style.display = canSetFormat ? 'block' : 'none';
+
+		if (canSetFormat)
+			setFormat.setAttribute('onclick', 'dom.setFolderFormatDialog(\'' + escapeQuotes(escapeBackSlash(path), 'simples') + '\');');
+	}
+
+	if (viewRelationships) {
+		const canViewRelationships = !isServer && folder && !/app\.asar\.unpacked/.test(path);
+		viewRelationships.style.display = canViewRelationships ? 'block' : 'none';
+
+		if (canViewRelationships)
+			viewRelationships.setAttribute('onclick', 'dom.loadRelationshipExplorerPage(\'' + escapeQuotes(escapeBackSlash(path), 'simples') + '\');');
 	}
 
 	let remove = document.querySelector('#index-context-menu .context-menu-remove');
@@ -3551,7 +3707,18 @@ function refreshFolderMetadata(path) {
 
 	(async function () {
 		try {
-			await tracking.refetchFolderMetadataFromAniList(folderPath, metadata.anilistId || 0, true, fallbackTitle);
+			// A folder whose confirmed match is MyAnimeList's (source: 'myanimelist', malId set,
+			// no anilistId) used to still be refreshed through the AniList-only path below
+			// regardless - which does nothing with a MAL id and falls back to a fresh, generic
+			// fuzzy search instead of actually refreshing the existing match (see
+			// refetchFolderMetadataFromMyAnimeList()'s own comment for the fuller version of this).
+			if (metadata.anilistId > 0)
+				await tracking.refetchFolderMetadataFromAniList(folderPath, metadata.anilistId || 0, true, fallbackTitle);
+			else if (metadata.malId > 0)
+				await tracking.refetchFolderMetadataFromMyAnimeList(folderPath, metadata.malId, true, fallbackTitle);
+			else
+				await tracking.refetchFolderMetadataFromAniList(folderPath, 0, true, fallbackTitle);
+
 			reloadMetadataUi();
 			events.snackbar({
 				key: 'metadataRefreshOk',
@@ -3568,6 +3735,85 @@ function refreshFolderMetadata(path) {
 			});
 		}
 	})();
+}
+
+// The folder-context-menu "Set format" action - a manual correction for when metadata fetch gets
+// a title's manga/manhua/manhwa classification wrong, or a folder AniList/MAL never matched at
+// all still needs one to pick a header design and reading mode. Picking one here calls
+// tracking.setFolderSeriesType(), which locks metadata.seriesType against being overwritten by a
+// future scrape (seriesTypeManual, folder-metadata.js) and forces the matching reading-mode
+// default (reading.setTrackedSeriesReadingMode()) even over a reading mode the user had
+// separately customised for this folder - see that function's own comment for why.
+function setFolderFormatDialog(path) {
+	path = relative.path(path);
+
+	const folderPath = tracking.getFolderMetadataPath(path);
+	if (!folderPath)
+		return;
+
+	const metadata = tracking.getFolderMetadata(folderPath) || {};
+	const currentType = metadata.seriesTypeManual ? (metadata.seriesType || '') : '';
+	const escapedPath = escapeQuotes(escapeBackSlash(folderPath), 'simples');
+
+	const option = function (value, label, description) {
+		const active = currentType === value;
+
+		// Not menu-simple-element here - that class is built for a single-line 40px menu row
+		// (fixed height, white-space: nowrap, display: flex as a row), which ran the label and
+		// description together onto one clipped line instead of stacking them. This needs its own
+		// block-stacked layout instead.
+		return '<div class="gamepad-item" style="display:block; border-radius:10px; margin-bottom:8px; padding:12px 14px; cursor:pointer;'
+			+ (active ? ' outline: 2px solid currentColor;' : ' outline: 1px solid rgba(128,128,128,0.35);') + '" onclick="dom.setFolderFormat(\'' + escapedPath + '\', \'' + value + '\');">'
+			+ '<div class="body-medium" style="display:block; font-weight:600;">' + label + (active ? ' &nbsp;&#10003;' : '') + '</div>'
+			+ '<div class="body-small" style="display:block; opacity:0.7; margin-top:4px;">' + description + '</div>'
+			+ '</div>';
+	};
+
+	const content = ''
+		+ '<div class="body-small" style="opacity:0.75; margin-bottom:14px;">Overrides whatever metadata fetch detected for this series, and switches its reading mode to match (paged vs. vertical scroll).</div>'
+		+ option('manga', 'Manga', 'Paged, double-page spreads.')
+		+ option('manhua', 'Manhua', 'Vertical, continuous scroll.')
+		+ option('manhwa', 'Manhwa', 'Vertical, continuous scroll.');
+
+	const buttons = [
+		{
+			text: language.buttons.cancel,
+			function: 'events.closeDialog();',
+		},
+	];
+
+	if (currentType) {
+		buttons.push({
+			text: 'Auto-detect',
+			function: 'dom.setFolderFormat(\'' + escapedPath + '\', \'\');',
+		});
+	}
+
+	events.dialog({
+		header: 'Set format',
+		width: 420,
+		height: false,
+		content: content,
+		buttons: buttons,
+	});
+}
+
+function setFolderFormat(path, seriesType) {
+	path = relative.path(path);
+
+	const folderPath = tracking.getFolderMetadataPath(path);
+	if (!folderPath)
+		return;
+
+	tracking.setFolderSeriesType(folderPath, seriesType);
+	events.closeDialog();
+	reloadMetadataUi();
+
+	events.snackbar({
+		key: 'seriesFormatSet',
+		text: seriesType ? ('Format set to ' + seriesType.charAt(0).toUpperCase() + seriesType.slice(1)) : 'Format set to auto-detect',
+		duration: 4,
+	});
 }
 
 function markFolderMetadataWrongMatch(path) {
@@ -3698,7 +3944,19 @@ function editMetadataDialog(path, save = false, clear = false) {
 		(async function() {
 			try
 			{
-				await tracking.refetchFolderMetadataFromAniList(folderPath, anilistId, true, title);
+				// Prefer whichever id the user actually filled in - a malId with no anilistId
+				// used to still go through the AniList-only refetch below regardless, which does
+				// nothing useful with an id from a different site and falls back to a fresh,
+				// generic fuzzy search using the folder's own name (see
+				// refetchFolderMetadataFromMyAnimeList()'s own comment) - not what "I looked this
+				// up on MAL and am telling you which one it is" means.
+				if(anilistId > 0)
+					await tracking.refetchFolderMetadataFromAniList(folderPath, anilistId, true, title);
+				else if(malId > 0)
+					await tracking.refetchFolderMetadataFromMyAnimeList(folderPath, malId, true, title);
+				else
+					await tracking.refetchFolderMetadataFromAniList(folderPath, anilistId, true, title);
+
 				setTimeout(reloadMetadataUi, 0);
 			}
 			catch(error)
@@ -4320,6 +4578,9 @@ module.exports = {
 	loadLanguagePage: loadLanguagePage,
 	loadSettingsPage: loadSettingsPage,
 	loadThemePage: loadThemePage,
+	loadWeatherPage: loadWeatherPage,
+	loadConstellationPage: loadConstellationPage,
+	loadRelationshipExplorerPage: loadRelationshipExplorerPage,
 	changeLanguage: changeLanguage,
 	selectMenuItem: selectMenuItem,
 	floatingActionButton: floatingActionButton,
@@ -4349,6 +4610,8 @@ module.exports = {
 	editMetadataDialog: editMetadataDialog,
 	rateRecommendation: rateRecommendation,
 	refreshFolderMetadata: refreshFolderMetadata,
+	setFolderFormatDialog: setFolderFormatDialog,
+	setFolderFormat: setFolderFormat,
 	markFolderMetadataWrongMatch: markFolderMetadataWrongMatch,
 	renamePath: renamePath,
 	removeComic: removeComic,

@@ -256,6 +256,9 @@ const app = require(p.join(appDir, '.dist/app.js')),
 	fileManager = require(p.join(appDir, '.dist/file-manager.js')),
 	recentlyOpened = require(p.join(appDir, '.dist/recently-opened.js')),
 	theme = require(p.join(appDir, '.dist/theme.js')),
+	weather = require(p.join(appDir, '.dist/weather.js')),
+	constellation = require(p.join(appDir, '.dist/constellation.js')),
+	relationshipExplorer = require(p.join(appDir, '.dist/relationship-explorer.js')),
 	shortcuts = require(p.join(appDir, '.dist/shortcuts.js'));
 
 // Lazily loaded modules.

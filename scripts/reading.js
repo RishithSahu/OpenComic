@@ -4157,6 +4157,51 @@ function applyTrackedSeriesReadingDefaults(readingPagesConfigPath = '', storedRe
 	return true;
 }
 
+// Called by tracking.setFolderSeriesType() - the folder-context-menu "Set format" action, an
+// explicit user correction rather than a passive metadata-driven guess. Deliberately does not go
+// through applyTrackedSeriesReadingDefaults()/hasCustomTrackedSeriesMode(): that pairing backs off
+// the moment a folder's reading settings look customised, which is correct for an automatic
+// default but wrong here - choosing a format is exactly as deliberate an action as customising the
+// reading mode some other way would have been, and should win over it regardless.
+function setTrackedSeriesReadingMode(folderPath = '', seriesType = '') {
+	const normalizedPath = folderPath ? p.normalize(folderPath) : '';
+	if (!normalizedPath)
+		return false;
+
+	if (seriesType !== 'manga' && seriesType !== 'manhwa' && seriesType !== 'manhua') {
+		// Clearing back to auto-detect: drop the stored override entirely (not just its
+		// trackedSeriesType) so a future scrape's applyTrackedSeriesReadingDefaults() can
+		// auto-apply cleanly again, the same as a folder whose reading mode was never touched.
+		storage.deleteVar('readingPagesConfig', normalizedPath);
+
+		return true;
+	}
+
+	const readingPagesConfig = {
+		configKey: false,
+		trackedSeriesType: seriesType,
+	};
+
+	if (seriesType === 'manga') {
+		readingPagesConfig.readingView = 'slide';
+		readingPagesConfig.readingManga = true;
+		readingPagesConfig.readingWebtoon = false;
+		readingPagesConfig.readingDoublePage = true;
+		readingPagesConfig.readingNotEnlargeMoreThanOriginalSize = true;
+	}
+	else {
+		readingPagesConfig.readingView = 'scroll';
+		readingPagesConfig.readingManga = false;
+		readingPagesConfig.readingWebtoon = true;
+		readingPagesConfig.readingDoublePage = false;
+		readingPagesConfig.readingNotEnlargeMoreThanOriginalSize = false;
+	}
+
+	storage.updateVar('readingPagesConfig', normalizedPath, readingPagesConfig);
+
+	return true;
+}
+
 // Applying the defaults at open time is not enough: the AniList scrape for a folder is kicked
 // off by tracking.autoPrompt() at the *end* of read(), so on the very first open of a series the
 // metadata does not exist yet and nothing is applied — which is why it only took effect after
@@ -6681,6 +6726,7 @@ module.exports = {
 	purgeGlobalReadingPagesConfig: purgeGlobalReadingPagesConfig,
 	updateConfigLabels: updateConfigLabels,
 	applyTrackedSeriesReadingDefaultsForFolder: applyTrackedSeriesReadingDefaultsForFolder,
+	setTrackedSeriesReadingMode: setTrackedSeriesReadingMode,
 	onReading: function () { return onReading },
 	calculateImagesDistribution: calculateImagesDistribution,
 	imagesDistribution: function () { return imagesDistribution },

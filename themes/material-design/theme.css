@@ -21,7 +21,19 @@
 @import url('./coverflow.css');
 @import url('./opds.css');
 @import url('./tutorial.css');
+@import url('./weather.css');
+@import url('./constellation.css');
+@import url('./relationship-explorer.css');
 @import url('./colors/all.colors.css');
+
+/* Not imported from colors/all.colors.css alongside the colour tokens it sits next to on disk -
+that file is regenerated from scratch on every build by colors/generate-colors.js (its own
+hardcoded template, rebuilt from whatever colour folders it finds), which would silently drop
+these two on the very next build. Imported from here instead, a file nothing regenerates. Order
+still matters: both need to load after the colour tokens above so a style's own override of a
+shared token name (the motion-easing ones) wins. */
+@import url('./colors/shape.css');
+@import url('./styles/all.styles.css');
 
 /* Animations */
 
@@ -659,6 +671,9 @@ body
 	/*background-color: #eee;*/
 	font-family: Roboto;
 	font-weight: 400;
+	/* --font-display (shape.css / styles/) only touches the heading/display utility classes
+	below - body text itself stays on the app's own bundled Roboto so legibility never depends
+	on an unbundled font being installed. */
 	color: #333;
 	font-size: 13px;
 	user-select: none;
@@ -948,7 +963,7 @@ a:hover
 	transition: background-color 0.2s;
 	cursor: pointer;
 	margin: 0px 0px 0px 12px;
-	border-radius: 56px;
+	border-radius: var(--shape-radius-nav-pill, 56px);
 	position: relative;
 	overflow: hidden;
 	color: var(--md-sys-color-on-surface-variant);
@@ -982,7 +997,7 @@ a:hover
 	transition-duration: 0.15s, 0.15s, 0.2s;
 	transition-property: transform, opacity, background;
 	transition-timing-function: linear, linear, ease;
-	border-radius: 100px;
+	border-radius: var(--shape-radius-nav-pill-fill, 100px);
 	background: var(--md-sys-color-secondary-container);
 	z-index: -1;
 }
@@ -1064,9 +1079,20 @@ a:hover
 	margin-top: 0px;
 	width: 100%;
 	background-color: var(--md-sys-color-background);
+	/* Aurora Mesh - three soft, off-centre colour blooms instead of flat black behind the
+	library grid - is now the *default* --surface-texture-image (shape.css), reproduced here as
+	this property's own fallback so "no style theme selected" still looks like what shipped.
+	A style theme (.app.style-<key>, themes/material-design/styles/) overrides the variable
+	itself to swap in its own texture; nothing here needs to change to add one. */
+	background-image: var(--surface-texture-image,
+		radial-gradient(circle at 15% 20%, color-mix(in srgb, #7c4dff, transparent 72%), transparent 42%),
+		radial-gradient(circle at 82% 15%, color-mix(in srgb, #2dd4bf, transparent 78%), transparent 45%),
+		radial-gradient(circle at 55% 90%, color-mix(in srgb, #3b6eff, transparent 78%), transparent 50%));
+	background-size: var(--surface-texture-size, auto);
+	background-repeat: var(--surface-texture-repeat, repeat);
 	transition: background-color 0.2s;
 	overflow: hidden;
-	border-top-left-radius: 16px;
+	border-top-left-radius: var(--shape-radius-panel, 16px);
 }
 
 .hide-content-left .content-right > div
@@ -2985,6 +3011,454 @@ a:hover
 		margin-top: 13px;
 		font-size: clamp(15px, 1.65vw, 18px);
 		-webkit-line-clamp: 5;
+	}
+}
+
+/* Format-specific series headers (folder-format-obi/hybrid/glitch below) declare their intended
+display font by name (Anton, Shippori Mincho, Ma Shan Zheng, Share Tech Mono, ...) with a generic
+fallback, the same convention the rest of this theme already uses for "font-family: Roboto" above
+- neither is bundled with the app, so on a system that does not have the named font installed this
+silently falls back to the generic rather than failing, same risk already accepted app-wide. */
+
+/* ===================== Manga: Obi Band ===================== */
+
+.folder-format-obi
+{
+	margin: 20px 18px 12px 18px;
+	padding: 30px 34px 0px 34px;
+	border-radius: 18px;
+	position: relative;
+	overflow: hidden;
+	/* Aged kraft-paper tan rather than the near-white cream this started at (too bright/glaring
+	against the rest of a dark UI) or the near-black cover before that (too dark) - a middle
+	tone, still clearly a light card, without reading as glaring white. */
+	background-color: #c3ac83;
+	background-image: radial-gradient(circle at 78% 8%, rgba(60, 38, 10, 0.1), transparent 46%);
+	color: #241a12;
+	box-shadow: 0px 14px 32px rgba(0, 0, 0, 0.24);
+}
+
+.obi-kanji-mark
+{
+	position: absolute;
+	top: 26px;
+	right: 30px;
+	width: 38px;
+	height: 38px;
+	border: 2px solid rgba(90, 60, 30, 0.28);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-family: "Anton", Impact, "Arial Narrow Bold", sans-serif;
+	font-size: 17px;
+	color: rgba(90, 60, 30, 0.55);
+	transform: rotate(3deg);
+}
+
+.obi-eyebrow
+{
+	font-family: "Shippori Mincho", Georgia, serif;
+	font-size: 13px;
+	letter-spacing: 4px;
+	color: #6e4416;
+	text-transform: uppercase;
+	margin-bottom: 14px;
+}
+
+.obi-title
+{
+	font-family: "Anton", Impact, "Arial Narrow Bold", sans-serif;
+	font-size: clamp(28px, 2.4vw, 44px);
+	letter-spacing: 0.3px;
+	line-height: 1.02;
+	color: #241a12;
+	margin-bottom: 14px;
+	max-width: min(1180px, 98%);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	display: -webkit-box;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 2;
+}
+
+.obi-meta
+{
+	font-family: "Shippori Mincho", Georgia, serif;
+	font-size: clamp(14px, 1vw, 17px);
+	color: #5a4a38;
+	margin-bottom: 24px;
+}
+
+.obi-band
+{
+	position: relative;
+	margin: 0px -34px;
+	background: linear-gradient(180deg, #e2664f, #cf4f38);
+	padding: 16px 34px 18px 34px;
+}
+
+.obi-genres
+{
+	display: flex;
+	flex-wrap: wrap;
+	margin-bottom: 8px;
+}
+
+.obi-genres span
+{
+	font-size: 12px;
+	font-weight: 700;
+	letter-spacing: 0.8px;
+	color: #fff3ee;
+	text-transform: uppercase;
+	cursor: pointer;
+	user-select: none;
+}
+
+.obi-genres span:not(:first-child):before
+{
+	content: '／';
+	margin: 0px 8px;
+	color: rgba(255, 243, 238, 0.55);
+}
+
+.obi-rating
+{
+	font-family: "Anton", Impact, "Arial Narrow Bold", sans-serif;
+	font-size: 13px;
+	color: #ffe7de;
+	letter-spacing: 1.5px;
+}
+
+.obi-body
+{
+	padding: 26px 0px 30px 0px;
+}
+
+.obi-frame
+{
+	border: 1px solid rgba(90, 60, 30, 0.22);
+	padding: 18px 22px;
+	position: relative;
+}
+
+.obi-frame:before
+{
+	content: '';
+	position: absolute;
+	inset: 5px;
+	border: 1px solid rgba(90, 60, 30, 0.1);
+	pointer-events: none;
+}
+
+.obi-desc
+{
+	font-family: "Shippori Mincho", Georgia, serif;
+	font-size: clamp(17px, 1.15vw, 20px);
+	line-height: 1.8;
+	color: #fdfcfc;
+	max-width: 70ch;
+	display: -webkit-box;
+	-webkit-line-clamp: 6;
+	-webkit-box-orient: vertical;
+	overflow: hidden;
+}
+
+/* ===================== Manhua: brush-calligraphy crown + cultivation-ledger body ===================== */
+
+.folder-format-hybrid
+{
+	margin: 20px 18px 12px 18px;
+	border-radius: 14px;
+	overflow: hidden;
+	position: relative;
+	background: linear-gradient(160deg, #0f2b22, #123a2c);
+	border: 1px solid rgba(212, 175, 90, 0.35);
+	box-shadow: 0px 14px 32px rgba(0, 0, 0, 0.3);
+	color: #eaf3ec;
+}
+
+.hybrid-brocade
+{
+	height: 12px;
+	background-image: repeating-linear-gradient(45deg, #8a1f1f 0px 6px, #a9331f 6px 12px);
+}
+
+.hybrid-top
+{
+	position: relative;
+	padding: 26px 34px 4px 34px;
+}
+
+.hybrid-seal
+{
+	position: absolute;
+	top: 20px;
+	right: 28px;
+	width: 42px;
+	height: 42px;
+	background: #a3181c;
+	color: #f7ede0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-family: "Ma Shan Zheng", Georgia, serif;
+	font-size: 19px;
+	border-radius: 3px;
+	transform: rotate(-4deg);
+	box-shadow: 0px 3px 8px rgba(0, 0, 0, 0.35);
+}
+
+.hybrid-title
+{
+	font-family: "Ma Shan Zheng", Georgia, serif;
+	font-size: clamp(26px, 2.4vw, 40px);
+	color: #f0d99a;
+	line-height: 1.18;
+	max-width: min(1180px, 90%);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	display: -webkit-box;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 2;
+}
+
+.hybrid-body
+{
+	padding: 10px 34px 30px 34px;
+}
+
+.hybrid-badge
+{
+	display: inline-flex;
+	align-items: center;
+	padding: 5px 13px;
+	border: 1px solid #d4af5a;
+	border-radius: 3px;
+	font-weight: 700;
+	font-size: 11.5px;
+	letter-spacing: 1.4px;
+	color: #f0d99a;
+	background: rgba(212, 175, 90, 0.08);
+	margin-bottom: 14px;
+}
+
+.hybrid-meta
+{
+	font-size: clamp(13px, 0.9vw, 15px);
+	color: #a9c4b4;
+	margin-bottom: 14px;
+}
+
+.hybrid-meter
+{
+	height: 6px;
+	border-radius: 3px;
+	background: rgba(255, 255, 255, 0.08);
+	overflow: hidden;
+	margin-bottom: 6px;
+	max-width: 320px;
+}
+
+.hybrid-meter-fill
+{
+	height: 100%;
+	background: linear-gradient(90deg, #d4af5a, #f0d99a);
+}
+
+.hybrid-meter-label
+{
+	font-size: 10.5px;
+	letter-spacing: 1px;
+	color: #8fae9c;
+	margin-bottom: 18px;
+}
+
+.hybrid-tokens
+{
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin-bottom: 18px;
+}
+
+.hybrid-tokens span
+{
+	font-size: 11.5px;
+	font-weight: 600;
+	padding: 5px 12px;
+	border-radius: 5px;
+	background: rgba(212, 175, 90, 0.12);
+	border: 1px solid rgba(212, 175, 90, 0.4);
+	color: #e9d9ad;
+	cursor: pointer;
+	user-select: none;
+}
+
+.hybrid-desc
+{
+	font-size: clamp(17px, 1.15vw, 20px);
+	line-height: 1.75;
+	color: #cddcd2;
+	max-width: 70ch;
+	display: -webkit-box;
+	-webkit-line-clamp: 6;
+	-webkit-box-orient: vertical;
+	overflow: hidden;
+}
+
+/* ===================== Manhwa: Regression Glitch ===================== */
+
+.folder-format-glitch
+{
+	margin: 20px 18px 12px 18px;
+	padding: 28px 32px 26px 32px;
+	border-radius: 8px;
+	position: relative;
+	overflow: hidden;
+	background: #0a0a0d;
+	color: #e6e6ea;
+	box-shadow: 0px 14px 32px rgba(0, 0, 0, 0.35);
+	clip-path: polygon(0% 0%, 100% 0%, 100% 100%, 3% 100%, 0% 92%);
+}
+
+.glitch-noise
+{
+	position: absolute;
+	inset: 0px;
+	background-image: repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.02) 0px 1px, transparent 1px 3px);
+	pointer-events: none;
+}
+
+.glitch-time
+{
+	position: relative;
+	font-family: "Share Tech Mono", Consolas, "SF Mono", "Courier New", monospace;
+	font-size: 11px;
+	color: #3dffb0;
+	margin-bottom: 12px;
+}
+
+.glitch-title
+{
+	position: relative;
+	font-family: "Black Han Sans", "Segoe UI", Roboto, sans-serif;
+	font-weight: 900;
+	font-size: clamp(26px, 2.3vw, 38px);
+	color: #fff;
+	margin-bottom: 12px;
+	max-width: min(1180px, 96%);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	display: -webkit-box;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 2;
+}
+
+.glitch-title:before, .glitch-title:after
+{
+	content: attr(data-text);
+	position: absolute;
+	left: 0px;
+	top: 0px;
+	z-index: -1;
+	display: -webkit-box;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 2;
+	overflow: hidden;
+	max-width: min(1180px, 96%);
+}
+
+.glitch-title:before
+{
+	left: 2px;
+	color: #ff2f4e;
+	opacity: 0.7;
+}
+
+.glitch-title:after
+{
+	left: -2px;
+	color: #2fd8ff;
+	opacity: 0.7;
+}
+
+.glitch-meta
+{
+	position: relative;
+	font-size: clamp(12.5px, 0.9vw, 14px);
+	color: #8b93a6;
+	margin-bottom: 16px;
+}
+
+.glitch-chips
+{
+	position: relative;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin-bottom: 16px;
+}
+
+.glitch-chips span
+{
+	font-family: "Share Tech Mono", Consolas, "SF Mono", "Courier New", monospace;
+	font-size: 10.5px;
+	border: 1px solid #3a3f4e;
+	color: #9aa1b0;
+	padding: 4px 10px;
+	cursor: pointer;
+	user-select: none;
+}
+
+.glitch-desc
+{
+	position: relative;
+	font-size: clamp(17px, 1.15vw, 20px);
+	line-height: 1.65;
+	color: #aeb3c2;
+	max-width: 70ch;
+	display: -webkit-box;
+	-webkit-line-clamp: 6;
+	-webkit-box-orient: vertical;
+	overflow: hidden;
+}
+
+@media (max-width: 900px)
+{
+	.folder-format-obi
+	{
+		margin: 14px 12px 10px 12px;
+		padding: 20px 20px 0px 20px;
+		border-radius: 14px;
+	}
+
+	.obi-band
+	{
+		margin: 0px -20px;
+		padding: 13px 20px 15px 20px;
+	}
+
+	.obi-body
+	{
+		padding: 18px 0px 22px 0px;
+	}
+
+	.folder-format-hybrid
+	{
+		margin: 14px 12px 10px 12px;
+	}
+
+	.hybrid-top, .hybrid-body
+	{
+		padding-left: 20px;
+		padding-right: 20px;
+	}
+
+	.folder-format-glitch
+	{
+		margin: 14px 12px 10px 12px;
+		padding: 20px 20px 20px 20px;
 	}
 }
 

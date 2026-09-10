@@ -1,0 +1,41 @@
+/* Base tokens for the style-theme system (themes/material-design/styles/) - shape, display
+typography, and background texture, the same way easing.css already holds the motion tokens and
+colors.module.css holds the colour ones. Every value here is the literal it replaces at its call
+site, so consuming it changes nothing until a style theme (.app.style-<key>) overrides it - these
+are defaults, not requirements, and the app looks exactly as it always did with none selected. */
+:root {
+	/* Shape - corner radii for the handful of primitives almost every screen reuses: toggle
+	switches, buttons (both the pill "filled" style and its "square" variant), the round slider
+	thumb, the sidebar's active-item pill, and the main content pane/floating buttons. */
+	--shape-radius-control: 32px;
+	--shape-radius-button: 40px;
+	--shape-radius-button-compact: 36px;
+	--shape-radius-chip: 8px;
+	--shape-radius-thumb: 20px;
+	--shape-radius-thumb-native: 100px;
+	--shape-radius-nav-pill: 56px;
+	--shape-radius-nav-pill-fill: 100px;
+	--shape-radius-panel: 16px;
+	--shape-border-width: 2px;
+
+	/* Typography - --font-display is deliberately left undefined here (not even to a neutral
+	value like "inherit"): each of the seven display/headline/title-large rules
+	(typography.module.css) reads it as var(--font-display, <that rule's own original typescale
+	font>), so leaving it unset is what makes every one of them keep its exact original font with
+	nothing selected, and a style theme only has to set this one variable to retheme all seven at
+	once. Body/label text stays on the app's own bundled Roboto (fonts/roboto.css) regardless, so
+	legibility never depends on an unbundled font being installed - a style's display font is
+	still just declared by name with a generic fallback baked into the value (the same convention
+	the format-specific series headers already use), so an unsupported system falls back
+	gracefully there too. */
+
+	/* Background texture for the main content pane (.content-right > div) - a full
+	background-image value (gradients, dot patterns, ...) with every colour stop's own opacity
+	already baked in, consumed directly rather than layered as a separate element, so there is no
+	extra stacking context for a style to get wrong. "none" below is the literal default; the
+	Aurora Mesh treatment already shipped is reproduced as this same variable's fallback at its
+	one call site, so it stays the look of "no style selected" rather than being lost. */
+	--surface-texture-image: none;
+	--surface-texture-size: auto;
+	--surface-texture-repeat: repeat;
+}

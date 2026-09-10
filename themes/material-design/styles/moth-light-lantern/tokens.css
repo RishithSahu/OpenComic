@@ -1,0 +1,23 @@
+/* Moth-Light Lantern - warm nocturnal: soft lantern-rounded shapes, a slow breathing-glow
+motion, a warm literary serif, firefly-gold glow drifting low in the frame. */
+.app.style-moth-light-lantern {
+	--font-display: "EB Garamond", Georgia, serif;
+	--shape-radius-control: 26px;
+	--shape-radius-button: 16px;
+	--shape-radius-button-compact: 14px;
+	--shape-radius-chip: 8px;
+	--shape-radius-thumb: 18px;
+	--shape-radius-thumb-native: 90px;
+	--shape-radius-nav-pill: 16px;
+	--shape-radius-nav-pill-fill: 16px;
+	--shape-radius-panel: 16px;
+	--shape-border-width: 1px;
+	--md-sys-motion-easing-standard: cubic-bezier(0.3, 0.1, 0.2, 1);
+	--md-sys-motion-easing-standard-decelerate: cubic-bezier(0.1, 0.5, 0.15, 1);
+	--md-sys-motion-easing-legacy: cubic-bezier(0.3, 0.1, 0.2, 1);
+	--surface-texture-image:
+		radial-gradient(circle at 20% 85%, rgba(255, 200, 90, 0.14), transparent 38%),
+		radial-gradient(circle at 75% 70%, rgba(255, 180, 70, 0.08), transparent 36%);
+	--surface-texture-size: auto;
+	--surface-texture-repeat: no-repeat;
+}

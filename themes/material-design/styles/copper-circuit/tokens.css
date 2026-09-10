@@ -1,0 +1,23 @@
+/* Copper Circuit - steampunk/tech hybrid: small consistent radii, a mechanical snap, a
+condensed technical display face, and a faint etched-line grid. */
+.app.style-copper-circuit {
+	--font-display: "Rajdhani", "Segoe UI", sans-serif;
+	--shape-radius-control: 10px;
+	--shape-radius-button: 6px;
+	--shape-radius-button-compact: 6px;
+	--shape-radius-chip: 4px;
+	--shape-radius-thumb: 6px;
+	--shape-radius-thumb-native: 30px;
+	--shape-radius-nav-pill: 6px;
+	--shape-radius-nav-pill-fill: 6px;
+	--shape-radius-panel: 4px;
+	--shape-border-width: 2px;
+	--md-sys-motion-easing-standard: cubic-bezier(0.83, 0, 0.17, 1);
+	--md-sys-motion-easing-standard-decelerate: cubic-bezier(0.3, 0.6, 0.1, 1);
+	--md-sys-motion-easing-legacy: cubic-bezier(0.83, 0, 0.17, 1);
+	--surface-texture-image:
+		linear-gradient(90deg, rgba(200, 130, 60, 0.05) 1px, transparent 1px),
+		linear-gradient(0deg, rgba(200, 130, 60, 0.05) 1px, transparent 1px);
+	--surface-texture-size: 48px 48px;
+	--surface-texture-repeat: repeat;
+}

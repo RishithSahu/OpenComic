@@ -40,8 +40,15 @@ function isGenericFolderName(value = '')
 		'completed',
 		'ongoing',
 		'dropped',
+		'paused',
+		'reading',
+		'unread',
+		'wanted',
+		'backlog',
+		'planned',
 		'favorites',
 		'favourites',
+		'wishlist',
 		'chapters',
 		'chapter',
 		'volumes',
@@ -51,7 +58,18 @@ function isGenericFolderName(value = '')
 	if(generic.has(normalized))
 		return true;
 
-	if(/^(?:\d+\s*)?(?:completed|ongoing)\s+series$/.test(normalized))
+	// A user's own top-level reading-status folders ("1. Completed Series", "2. Paused Series",
+	// "3. Reading", "4. Planned to Read", "5. Time Pass Series", and no doubt others shaped like
+	// them) are not series titles, but nothing before this stopped one being sent to AniList/MAL
+	// as a search candidate like any other folder - "reading" and "planned to read" in particular
+	// were not caught by the single-word Set above at all. A false match here is worse than a
+	// missed one: scrapeFolderMetadata() writes it as this *folder's own* tracked metadata, and
+	// since these are read from *inside* by every real series folder below them,
+	// resolveTrackedSeriesFolder() (reading.js) walks up into exactly this folder looking for a
+	// tracked seriesType - a wrong manga/manhua/manhwa classification here silently overrides the
+	// reading mode for every series nested underneath it, not just this folder's own (nonexistent)
+	// header card.
+	if(/^(?:\d+\s*)?(?:completed|ongoing|dropped|paused|reading|unread|wanted|backlog|time\s*pass|planned(?:\s+to\s+read)?|plan\s+to\s+read|want(?:ing)?\s+to\s+read)(?:\s+(?:series|list))?$/.test(normalized))
 		return true;
 
 	return false;
@@ -61,8 +79,11 @@ function cleanCandidateTitle(value = '')
 {
 	value = String(value || '');
 
-	// File extension (if any)
-	value = value.replace(/\.[^./\\]{1,6}$/g, '');
+	// File extension (if any). Excludes whitespace from the extension body, not just '.'/'/'/'\' -
+	// a real extension never contains a space, but without that exclusion this matched (and ate)
+	// the tail of any title ending in "<abbreviation>. <word up to 6 chars>" - "Dr. Stone" losing
+	// everything but "Dr" to this being treated as a 6-character extension, most visibly.
+	value = value.replace(/\.[^./\\\s]{1,6}$/g, '');
 
 	// Common release / technical tags
 	value = value.replace(/[\[\(](?:\s*(?:\d{3,4}p|x26[45]|web[- ]?dl|raws?|v\d+|vol(?:ume)?\s*\d+|ch(?:apter)?\s*\d+|episode\s*\d+)[^\]\)]*)[\]\)]/giu, ' ');
@@ -185,6 +206,98 @@ function extractCandidatesFromFolderPath(folderPath = '', extraTitles = [])
 	return uniqueStrings(candidates).slice(0, 6);
 }
 
+// Iterative Levenshtein distance (single-row DP - O(len(a)*len(b)) time, O(min(len(a),len(b)))
+// space). Tokens here are individual words out of a manga title, so a handful of characters each;
+// there is no need for anything smarter.
+function levenshteinDistance(a = '', b = '')
+{
+	if(a === b) return 0;
+	if(!a.length) return b.length;
+	if(!b.length) return a.length;
+
+	if(a.length < b.length) { const swap = a; a = b; b = swap; }
+
+	let previousRow = new Array(b.length + 1);
+	for(let j = 0; j <= b.length; j++) previousRow[j] = j;
+
+	for(let i = 0; i < a.length; i++)
+	{
+		const currentRow = [i + 1];
+		const aChar = a.charCodeAt(i);
+
+		for(let j = 0; j < b.length; j++)
+		{
+			const cost = aChar === b.charCodeAt(j) ? 0 : 1;
+			currentRow.push(Math.min(
+				previousRow[j + 1] + 1, // deletion
+				currentRow[j] + 1, // insertion
+				previousRow[j] + cost, // substitution
+			));
+		}
+
+		previousRow = currentRow;
+	}
+
+	return previousRow[b.length];
+}
+
+// 1 for an exact match down to 0 for two tokens sharing nothing; tuned so a single typo'd/swapped
+// character in a mid-length word ("colour"/"color", "kimetsu"/"kimtsu") still scores close to 1,
+// while two genuinely different short words score close to 0.
+function tokenSimilarity(a = '', b = '')
+{
+	if(a === b) return 1;
+
+	const maxLen = Math.max(a.length, b.length);
+	if(!maxLen) return 1;
+
+	// A distance-based ratio on very short tokens ("a", "no", "wo") is far too forgiving (one
+	// substitution on a 2-character token is already "50% different" but reads as a completely
+	// different word) - fuzzy credit only kicks in once there is enough token to meaningfully
+	// diverge.
+	if(maxLen < 4) return 0;
+
+	return 1 - (levenshteinDistance(a, b) / maxLen);
+}
+
+// Best fuzzy-matched token overlap between two token lists: each token in `from` is credited up
+// to 1 for its best match in `to` (1 for an exact match, partial credit above the similarity
+// threshold for a near-miss, 0 otherwise), summed - the same shape as a set intersection count,
+// just fractional instead of integer, so titles differing by a typo, an alternate romanization,
+// or a singular/plural word still register as the near-match they are instead of losing that
+// word's worth of score entirely.
+const FUZZY_TOKEN_THRESHOLD = 0.75;
+
+function fuzzyTokenOverlap(from = [], to = [])
+{
+	const toSet = new Set(to);
+	let overlap = 0;
+
+	for(let i = 0, len = from.length; i < len; i++)
+	{
+		const token = from[i];
+
+		if(toSet.has(token))
+		{
+			overlap += 1;
+			continue;
+		}
+
+		let best = 0;
+
+		for(let j = 0, tlen = to.length; j < tlen; j++)
+		{
+			const similarity = tokenSimilarity(token, to[j]);
+			if(similarity > best) best = similarity;
+		}
+
+		if(best >= FUZZY_TOKEN_THRESHOLD)
+			overlap += best;
+	}
+
+	return overlap;
+}
+
 function scoreTitleMatch(query = '', target = '')
 {
 	const q = normalizeString(query);
@@ -202,19 +315,11 @@ function scoreTitleMatch(query = '', target = '')
 	if(!qTokens.length || !tTokens.length)
 		return 0;
 
-	const qSet = new Set(qTokens);
-	const tSet = new Set(tTokens);
+	const qUnique = Array.from(new Set(qTokens));
+	const tUnique = Array.from(new Set(tTokens));
 
-	let intersection = 0;
-
-	for(const token of qSet)
-	{
-		if(tSet.has(token))
-			intersection++;
-	}
-
-	const qCoverage = intersection / qSet.size;
-	const tCoverage = intersection / tSet.size;
+	const qCoverage = fuzzyTokenOverlap(qUnique, tUnique) / qUnique.length;
+	const tCoverage = fuzzyTokenOverlap(tUnique, qUnique) / tUnique.length;
 	const contains = (q.length >= 4 && t.includes(q)) || (t.length >= 4 && q.includes(t));
 	const startsWith = t.startsWith(q) || q.startsWith(t);
 
@@ -322,6 +427,8 @@ module.exports = {
 	getReferenceYear,
 	yearProximityScore,
 	extractCandidatesFromFolderPath,
+	levenshteinDistance,
+	tokenSimilarity,
 	scoreTitleMatch,
 	flattenResultTitles,
 	rankSearchResults,

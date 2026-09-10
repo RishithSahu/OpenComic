@@ -1,0 +1,24 @@
+/* Aurora Observatory - the shipped Aurora Mesh, promoted to a full style: soft pill shapes,
+slow drifting glow, a clean geometric display face for a night-sky observatory feel. */
+.app.style-aurora-observatory {
+	--font-display: "Exo 2", "Segoe UI", sans-serif;
+	--shape-radius-control: 32px;
+	--shape-radius-button: 44px;
+	--shape-radius-button-compact: 40px;
+	--shape-radius-chip: 12px;
+	--shape-radius-thumb: 20px;
+	--shape-radius-thumb-native: 100px;
+	--shape-radius-nav-pill: 999px;
+	--shape-radius-nav-pill-fill: 999px;
+	--shape-radius-panel: 22px;
+	--shape-border-width: 1px;
+	--md-sys-motion-easing-standard: cubic-bezier(0.25, 1, 0.5, 1);
+	--md-sys-motion-easing-standard-decelerate: cubic-bezier(0.1, 0.7, 0.2, 1);
+	--md-sys-motion-easing-legacy: cubic-bezier(0.25, 1, 0.5, 1);
+	--surface-texture-image:
+		radial-gradient(circle at 15% 20%, rgba(124, 77, 255, 0.32), transparent 44%),
+		radial-gradient(circle at 82% 15%, rgba(45, 212, 191, 0.26), transparent 48%),
+		radial-gradient(circle at 55% 92%, rgba(59, 110, 255, 0.26), transparent 52%);
+	--surface-texture-size: auto;
+	--surface-texture-repeat: no-repeat;
+}

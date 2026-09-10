@@ -38,9 +38,39 @@
 <span class="title-medium">{{name}}</span>
 {{#if active}}
 <div class="theme-page-check">
-<span class="material-icons">check_circle</span>
+<span class="material-icon">check_circle</span>
 </div>
 {{/if}}
+</div>
+</div>
+
+{{/each}}
+</div>
+
+<div class="theme-section-title title-medium">Visual Style</div>
+<div class="theme-section-subtitle body-medium">Layer shape, texture and motion on top of your accent colour - a style is optional and can be turned off from "Default" at any time</div>
+
+<div class="theme-page">
+{{#each styleThemes}}
+
+<div class="theme-page-item gamepad-item{{#if active}} active{{/if}}" onclick="theme.setStyle('{{key}}');">
+<div class="theme-page-preview">
+<div class="theme-page-colors">
+{{#each colors}}
+<div style="background-color: {{@this}};"></div>
+{{/each}}
+</div>
+</div>
+<div class="theme-page-footer" style="flex-direction: column; align-items: flex-start; gap: 4px;">
+<div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+<span class="title-medium">{{name}}</span>
+{{#if active}}
+<div class="theme-page-check">
+<span class="material-icon">check_circle</span>
+</div>
+{{/if}}
+</div>
+{{#if description}}<span class="body-small" style="opacity: 0.7;">{{description}}</span>{{/if}}
 </div>
 </div>
 
