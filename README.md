@@ -12,7 +12,7 @@
 
 <div align="center">
 
-[Why this fork](#why-this-fork) | [What's new](#whats-new) | [Screenshots](/SCREENSHOTS.MD) | [Features](#features) | [Changelog](/CHANGELOG.md) | [Download](#download)
+[Why this fork](#why-this-fork) | [What's new](#whats-new) | [New ways to see your library](#new-views) | [Screenshots](/SCREENSHOTS.MD) | [Features](#features) | [Changelog](/CHANGELOG.md) | [Download](#download)
 
 </div>
 
@@ -50,6 +50,14 @@ messy manga/manhwa library who want it to organise and read itself sensibly:
 ## What's new since v1.7.0
 
 Roughly 160 fork changes across `v1.7.0` → `v1.8.3`. The highlights:
+
+##### 🗺️ Three new library views
+
+- **[Series Relationship Explorer](#new-views)** — an interactive flowchart of a series' prequels,
+  sequels, spin-offs and adaptations, opening straight into your local files
+- **[Library Constellation](#new-views)** — the whole library as an interactive, night-sky-styled
+  star map, distance driven by genre similarity
+- **[Library Weather](#new-views)** — a five-number "weather report" dashboard for your reading habits
 
 ##### 📇 Manga-aware library
 
@@ -108,6 +116,62 @@ See [Performance](#performance) for the measurements.
 - Guides available offline from **Help ▸ Guides**
 - Right-click to delete custom catalog tabs
 - Windows installers no longer fail to start with `Could not load the "sharp" module`
+
+<a id="new-views"></a>
+
+## New ways to see your library
+
+A library, a series and your reading habits are each interesting in their own way that a plain grid
+and a plain list can't really show. Three new pages, each built around one specific question:
+
+### 🕸️ Series Relationship Explorer — "what else belongs with this one?"
+
+Right-click any series → **View relationships**. Instead of a wall of text, prequels, sequels,
+spin-offs, side stories and adaptations are laid out as a small flowchart: the adaptation (anime,
+if one exists) sits above the series itself, prequel → **this series** → sequel run left to right
+through the middle, and spin-offs / side stories sit below.
+
+Every node is resolved to your own library first — by the same tracking ID (AniList/MyAnimeList) if
+the related title is already tracked, and by fuzzy title match otherwise, using the same matching
+OpenComic already uses when it scrapes a folder's metadata in the first place. Click a node that
+resolved locally and it opens that series' actual files immediately — no searching, no guessing
+which folder it lives in. A relation that *doesn't* resolve locally (an anime adaptation, which
+naturally never has local files in a manga reader, or a prequel nobody's added yet) still shows in
+the diagram — click it and it opens that title's AniList or MyAnimeList page in your browser
+instead, so "nothing to click" never means "no information at all."
+
+### 🌌 Library Constellation — "what does my whole library actually look like?"
+
+A visual map of the *entire* library, styled as a real night sky rather than a generic node-link
+diagram: a deep-space background regardless of your active theme, a decorative starfield, and every
+series drawn as a small glowing star. Distance between two stars is genre similarity — series that
+actually share several genres end up visibly close together, unrelated ones drift apart — computed
+once as a physics simulation when the page opens, not live every frame.
+
+Genre similarity here is *weighted*, not a plain shared-tag count: a genre practically every series
+in your library has (Action, Comedy, Fantasy…) barely pulls two stars together, while a genre only a
+handful of series share (Cooking, Mecha, Isekai…) pulls hard — the same idea as TF-IDF weighting in
+search. Without that weighting, a real library's genre distribution collapses the whole map into one
+dense, illegible ball, since almost every pair of series shares *something* common. Distinctive
+clusters of stars get their own **nebula** — a soft, genre-tinted glow with the genre's name — so a
+region of the sky reads as "this is where the Isekai titles are" at a glance, without a label
+covering half the map for genres too common to mean anything as a cluster.
+
+Scroll to zoom (anchored to your cursor, not the middle of the screen), drag to pan, and click any
+star to jump straight into that series.
+
+### ☁️ Library Weather — "how am I actually doing?"
+
+A small, deliberately unserious dashboard, not another analytics page: unfinished series, series
+you completed *this month*, series you're actively reading (touched in the last two weeks), series
+untouched for over a year, and folders still missing a confirmed metadata match. Every number comes
+straight from data OpenComic already stores locally — your real reading progress, not a separate
+tracked-in-parallel counter that can quietly drift out of sync with it — so opening the page costs
+nothing extra and the numbers are always current.
+
+It's not trying to be a serious analytics suite. It's a "weather report" for a library that can
+easily have hundreds of series in it: five honest numbers, presented for a moment's reaction ("oh, I
+really should get back to that one") rather than a dashboard to study.
 
 <a id="performance"></a>
 
